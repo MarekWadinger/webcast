@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 from prophet import Prophet
 from prophet.plot import plot_plotly, plot_components_plotly
+import base64
 
 
 @st.cache(suppress_st_warning=True)
@@ -41,8 +42,7 @@ if file:
     # Import the csv file as pandas data frame
     m, forecast = prediction(file, user_periods)
     #if user_plot:
-    st.plotly_chart(plot_plotly(m, forecast))
-    st.plotly_chart(plot_components_plotly(m, forecast))
+    
     if user_save_json:
         forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].to_json(str(user_periods) +'_day_load_forecast.json')
     if user_save_csv:
@@ -50,5 +50,7 @@ if file:
         b64 = base64.b64encode(csv).decode()
         href = f'<a href="data:file/csv;base64,{b64}" download="captura.csv" target="_blank">Download csv file</a>'
         st.markdown(href, unsafe_allow_html=True)
+    st.plotly_chart(plot_plotly(m, forecast))
+    st.plotly_chart(plot_components_plotly(m, forecast))
         
         
