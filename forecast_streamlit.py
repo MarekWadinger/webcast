@@ -46,4 +46,9 @@ if file:
     if user_save_json:
         forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].to_json(str(user_periods) +'_day_load_forecast.json')
     if user_save_csv:
-        forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].to_csv(str(user_periods) +'_day_load_forecast.csv')
+        csv = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].to_csv(str(user_periods) +'_day_load_forecast.csv').encode()
+        b64 = base64.b64encode(csv).decode()
+        href = f'<a href="data:file/csv;base64,{b64}" download="captura.csv" target="_blank">Download csv file</a>'
+        st.markdown(href, unsafe_allow_html=True)
+        
+        
