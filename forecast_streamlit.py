@@ -7,22 +7,28 @@ import base64
 
 
 @st.cache(suppress_st_warning=True)
-def prediction(data_file, prediction_period, country, chps, sps , hps):
-    # Import the csv file as pandas data frame
-    df = pd.read_csv(data_file)
-    df_new = df[['DateTime', 'Load']].rename(columns={"DateTime": "ds", "Load": "y"})
-    m = Prophet(changepoint_prior_scale = chps, seasonality_prior_scale = sps, holidays_prior_scale = hps,
-            daily_seasonality = True, weekly_seasonality=28, yearly_seasonality = False)
-    # Add local holidays
-    m.add_country_holidays(country)
-    # Call fit method with historical data
-    m.fit(df_new)
+def prediction(m, prediction_period):
     # Extend df to the future by specified number of hours
     future = m.make_future_dataframe(periods=prediction_period * 24 * 4 , freq='15min')
     # Make prediction
     forecast = m.predict(future)
 
     return m, forecast
+
+@st.cache(suppress_st_warning=True)
+def build_model(data_file, country, chps, sps , hps):
+    # Import the csv file as pandas data frame
+    df = pd.read_csv(data_file)
+    df_new = df[['DateTime', 'Load']].rename(columns={"DateTime": "ds", "Load": "y"})
+    
+    m = Prophet(changepoint_prior_scale = chps, seasonality_prior_scale = sps, holidays_prior_scale = hps,
+            daily_seasonality = True, weekly_seasonality=28, yearly_seasonality = False)
+    # Add local holidays
+    m.add_country_holidays(country)
+    # Call fit method with historical data
+    m.fit(df_new)
+    
+    return m
     
 def save_csv(forecast):
     csv = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].to_csv().encode()
@@ -65,7 +71,8 @@ user_hps = st.sidebar.number_input('Holidays Prior Scale',min_value=0.00,max_val
 
 if file:
     # Import the csv file as pandas data frame
-    m, forecast = prediction(file, user_periods, user_country, user_chps, user_sps , user_hps)
+    m = build_model(file,user_country, user_chps, user_sps , user_hps)
+    m, forecast = prediction(m, user_periods)
     
     st.subheader('Download prediction')
     st.markdown(save_json(forecast), unsafe_allow_html=True)   
