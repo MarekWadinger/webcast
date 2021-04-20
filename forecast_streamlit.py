@@ -63,11 +63,11 @@ st.sidebar.markdown("https://github.com/dr-prodigy/python-holidays")
 user_chps = st.sidebar.number_input('Changepoint Prior Scale',min_value=0.000,max_value=100.000,value=0.001)
 user_sps = st.sidebar.number_input('Seasonality Prior Scale',min_value=0.00,max_value=100.00,value=0.1)
 user_hps = st.sidebar.number_input('Holidays Prior Scale',min_value=0.00,max_value=100.00,value=0.1)
-#user_ds = st.sidebar.selectbox('Daily Seasonality', ['True','False',"Auto"],index=0)
-#weekly = st.sidebar.selectbox('Weekly Seasonality', ['True','False',"Auto","Custom"],index=3)
-#weekly_placeholder = st.sidebar.empty()
-#user_ys = st.sidebar.selectbox('Yearly Seasonality', ['True','False',"Auto"],index=1)
-#weekly_placeholder.number_input("Custom weekly seasonality", min_value=0,max_value=100,value=28) if weekly == "Custom" else ""
+user_ds = st.sidebar.selectbox('Daily Seasonality', ['True','False',"Auto"],index=0)
+weekly = st.sidebar.selectbox('Weekly Seasonality', ['True','False',"Auto","Custom"],index=3)
+weekly_placeholder = st.sidebar.empty()
+user_ys = st.sidebar.selectbox('Yearly Seasonality', ['True','False',"Auto"],index=1)
+weekly_placeholder.number_input("Custom weekly seasonality", min_value=0,max_value=100,value=28) if weekly == "Custom" else ""
 
 if file:
     # Import the csv file as pandas data frame
