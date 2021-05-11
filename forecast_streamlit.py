@@ -2,11 +2,13 @@
 import streamlit as st
 import pandas as pd
 import base64
+import json
 
 from prophet.serialize import model_to_json
 from prophet.plot import plot_plotly, plot_components_plotly
 
 from loadforecast.forecaster import LoadProphet
+from loadforecast.model_load import model_load
 
 
 @st.cache(suppress_st_warning=True)
@@ -17,14 +19,14 @@ def prediction(model, prediction_period):
 
 
 @st.cache(suppress_st_warning=True)
-def build_model(data_file, country, chps, sps, hps, ds, ws, ys):
+def build_model(data_file, pre_model, country, chps, sps, hps, ds, ws, ys):
     # Import the csv file as pandas data frame
     df = pd.read_csv(data_file)
     df_new = df[['DateTime', 'Load']].rename(columns={'DateTime': 'ds', 'Load': 'y'})
     df_new['ds'] = pd.to_datetime(df_new['ds'])
-    model = LoadProphet(df_new, country=country, changepoint_prior_scale=chps, seasonality_prior_scale=sps,
-                        holidays_prior_scale=hps, daily_seasonality=ds, weekly_seasonality=ws,
-                        yearly_seasonality=ys)
+    model = LoadProphet(df_new, pretrained_model=pre_model, country=country, changepoint_prior_scale=chps,
+                        seasonality_prior_scale=sps, holidays_prior_scale=hps, daily_seasonality=ds,
+                        weekly_seasonality=ws, yearly_seasonality=ys)
     return model
 
 
@@ -32,21 +34,22 @@ def save_csv(forecast):
     csv = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].to_csv().encode()
     b64 = base64.b64encode(csv).decode()
     href = f'<a href="data:file/csv;base64,{b64}" download="load_forecast.csv" target="_blank">Download csv file</a>'
-
     return href
 
 
 def save_json(forecast):
-    json = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].to_json().encode()
-    b64 = base64.b64encode(json).decode()
+    json_file = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].to_json().encode()
+    b64 = base64.b64encode(json_file).decode()
     href = f'<a href="data:file/json;base64,{b64}" download="load_forecast.json" target="_blank">Download json file</a>'
     return href
 
 
 def model_json(model):
-    json = model_to_json(model).encode()
-    b64 = base64.b64encode(json).decode()
-    href = f'<a href="data:file/json;base64,{b64}" download="load_forecast.json" target="_blank">Download model json file</a>'
+    json_file = model_to_json(model)
+    json_file = json.dumps(json_file)
+    b64 = base64.b64encode(json_file.encode()).decode()
+    href = f'<a href="data:file/json;base64,{b64}" download="loadForecast_model.json" ' \
+           f'target="_blank">Download model json file</a>'
     return href
 
 
@@ -80,12 +83,17 @@ with st.sidebar:
         user_ys = st.selectbox('Yearly Seasonality', [True, False, 'auto'], index=1)
         submit_button = st.form_submit_button(label='Submit')
         if user_ws == 'Custom':
-            user_ws = weekly_placeholder.slider('Custom weekly seasonality', min_value=0, max_value=100, value=28, step=2)
+            user_ws = weekly_placeholder.slider('Weekly seasonality', min_value=0, max_value=100, value=28, step=2)
 
 
 if data_file:
+    if model_file:
+        attr_dict = json.loads(json.load(model_file))
+        m1 = model_load(attr_dict)
+    else:
+        m1 = None
     # Import the csv file as pandas data frame
-    m = build_model(data_file, user_country, user_chps, user_sps, user_hps, user_ds, user_ws, user_ys)
+    m = build_model(data_file, m1, user_country, user_chps, user_sps, user_hps, user_ds, user_ws, user_ys)
     forecast = prediction(m, user_periods)
     
     st.subheader('Download prediction')
