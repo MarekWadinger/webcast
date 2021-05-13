@@ -14,14 +14,14 @@ from loadforecast.model_load import model_load
 @st.cache(suppress_st_warning=True)
 def prediction(model, prediction_period):
     # Make prediction on extend df to the future by specified number of hours
-    forecast = model.prediction(prediction_periods=prediction_period * 24 * 4, frequency='15min')
-    return forecast
+    df_forecast = model.prediction(prediction_periods=prediction_period * 24 * 4, frequency='15min')
+    return df_forecast
 
 
 @st.cache(suppress_st_warning=True)
-def build_model(data_file, pre_model, country, chps, sps, hps, ds, ws, ys):
+def build_model(csv_data_file, pre_model, country, chps, sps, hps, ds, ws, ys):
     # Import the csv file as pandas data frame
-    df = pd.read_csv(data_file)
+    df = pd.read_csv(csv_data_file)
     df_new = df[['DateTime', 'Load']].rename(columns={'DateTime': 'ds', 'Load': 'y'})
     df_new['ds'] = pd.to_datetime(df_new['ds'])
     model = LoadProphet(df_new, pretrained_model=pre_model, country=country, changepoint_prior_scale=chps,
@@ -30,15 +30,15 @@ def build_model(data_file, pre_model, country, chps, sps, hps, ds, ws, ys):
     return model
 
 
-def save_csv(forecast):
-    csv = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].to_csv().encode()
+def save_csv(df_forecast):
+    csv = df_forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].to_csv().encode()
     b64 = base64.b64encode(csv).decode()
     href = f'<a href="data:file/csv;base64,{b64}" download="load_forecast.csv" target="_blank">Download csv file</a>'
     return href
 
 
-def save_json(forecast):
-    json_file = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].to_json().encode()
+def save_json(df_forecast):
+    json_file = df_forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].to_json().encode()
     b64 = base64.b64encode(json_file).decode()
     href = f'<a href="data:file/json;base64,{b64}" download="load_forecast.json" target="_blank">Download json file</a>'
     return href
@@ -84,7 +84,6 @@ with st.sidebar:
         submit_button = st.form_submit_button(label='Submit')
         if user_ws == 'Custom':
             user_ws = weekly_placeholder.slider('Weekly seasonality', min_value=0, max_value=100, value=28, step=2)
-
 
 if data_file:
     if model_file:
