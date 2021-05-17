@@ -10,7 +10,7 @@ from prophet.plot import plot_plotly, plot_components_plotly
 
 from loadforecast.forecaster import LoadProphet
 from loadforecast.model_load import model_load
-from anomaly import resample_data, anomaly_rate
+from src.anomaly import resample_data, anomaly_rate
 
 
 @st.cache(suppress_st_warning=True)
