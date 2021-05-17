@@ -3,3 +3,4 @@ plotly>=4.14.3
 streamlit>=0.80.0
 prophet==1.0.1
 loadforecast>=0.0.3
+pyod>=0.8.8
