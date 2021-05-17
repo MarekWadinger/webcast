@@ -1,7 +1,11 @@
-# semestral_project
+# Web App for Load Forecasting
 
-This project is integration of facebook/prophet automatic forecasting procedure into user friendly web app environment. It serves for automation of whole procedure, making it fast and easy to use for both research workers and users without programming skills. Web app is created using streamlit, thus whole code is programmed in Python.
+https://share.streamlit.io/marekwadinger/semestral_project/forecast_streamlit.py
 
-References:
-Prophet: https://github.com/facebook/prophet
-Streamlit: https://github.com/streamlit
+This project is integration of [loadforecast](https://github.com/MarekWadinger/loadforecast) an automatic time 
+series forecasting procedure of an electrical load based on 
+[prophet](https://github.com/facebook/prophet) and [pyod](https://github.com/yzhao062/pyod) anomaly detection toolkit 
+into user-friendly web app environment of [streamlit](https://github.com/streamlit/streamlit). 
+
+It serves for automation of whole procedure of electrical load forecasting, making it fast and easy to use for both 
+research workers and users with limited programming skills.
