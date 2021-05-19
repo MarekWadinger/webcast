@@ -65,9 +65,8 @@ col1, col2 = st.beta_columns(2)
 with col1:
     data_file = st.file_uploader('Import data as csv file. Data should have two columns named DateTime and Load.')
 with col2:
-    model_file = st.file_uploader('Import pretrained model as json file.')
+    model_file = st.file_uploader('Import pretrained model as json file. Without pretrained model app trains a new one.')
 user_period = st.slider('Prediction period in days:', min_value=1, max_value=14, value=1, step=1, )
-user_run = st.button('Run prediction')
 user_plot = st.button('Plot forecast')
 p1 = st.empty()
 p2 = st.empty()
