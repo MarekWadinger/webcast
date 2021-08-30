@@ -13,11 +13,28 @@ from pyod.models.knn import KNN
 from pyod.models.pca import PCA
 from pyod.models.ocsvm import OCSVM
 
-from src.se_api_process import get_se_as_df
+import json
+# from src.se_api_process import get_se_as_df
 
 
 class Report:
     pass
+
+
+def get_se_as_df(filename):
+    with open(filename) as f:
+        data = json.loads(f.read())
+    for record in data:
+        for key, value in record.items():
+            if type(value)==dict:
+                # extract only kWh
+                kWh = value['energy_kWh']
+                record[key] = kWh
+    df = pd.DataFrame(data)
+    # convert string to datetime object
+    df['created_on'] = pd.to_datetime(df['created_on'])
+    df = df.set_index('created_on')
+    return df
 
 
 def drop_missing(df: pd.DataFrame, valid_col_rate: float = 0.1) -> pd.DataFrame:
@@ -315,3 +332,10 @@ def anomaly_report(df: pd.DataFrame, train_size: float = 0.8, outliers_rate: flo
                        report_obj.bad_day_rate))
 
     return df_modules_long_anomaly, report_obj
+
+
+if __name__ == '__main__':
+    filename = '../se_daily.json'
+    df = get_se_as_df(filename)
+    anomaly_df, report = anomaly_report(df)
+    print(anomaly_df.head())
