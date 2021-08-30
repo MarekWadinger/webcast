@@ -4,7 +4,7 @@ import matplotlib
 from matplotlib import pyplot as plt
 from scipy.stats import stats
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
+# from sklearn.preprocessing import MinMaxScaler
 from pyod.models.copod import COPOD
 from pyod.models.cblof import CBLOF
 from pyod.models.hbos import HBOS
@@ -12,6 +12,8 @@ from pyod.models.iforest import IForest
 from pyod.models.knn import KNN
 from pyod.models.pca import PCA
 from pyod.models.ocsvm import OCSVM
+
+from src.se_api_process import get_se_as_df
 
 
 class Report:
@@ -74,7 +76,27 @@ def get_yield(df_subset: pd.DataFrame, df_set: pd.DataFrame) -> pd.DataFrame:
     return yield_modules
 
 
-def plot_outlier_detection(df_floats: pd.DataFrame, y_pred, clf, clf_name=None):
+def plot_outlier_detection(df_floats: pd.DataFrame, y_pred: np.ndarray, clf, clf_name: str = None):
+    """ Return contourf plot of the anomaly detection model.
+
+        Plots contourf plot of decision scores marking area where datapoints would be considered inliers.
+
+        Parameters
+            ----------
+            df_floats: pd.DataFrame with elements as floats.
+
+            y_pred: numpy array of the same length as df_floats that assigns 0/1 (inlier/outlier) to each observation
+                    according to fitted model.
+
+            clf: fitted model.
+
+            clf_name: name of fitted model.
+
+        Returns
+            -------
+            Contourf plot
+
+        """
     if df_floats.shape[1] > 2:
         print('Plotting first two variables')
     elif df_floats.shape[1] < 2:
@@ -155,11 +177,16 @@ def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: 
 
         classifier: string representing name of anomaly detection algorithm.
 
-        plot_a: plots contour.
+        plot_a: plots 2d contourf of anomaly detection scores.
 
     Returns
         -------
-        pd.DataFrame with product of row-wise division with the same shape as df_subset.
+        y_pred: numpy array of the same length as df_floats that assigns 0/1 (inlier/outlier) to each observation
+                    according to fitted model.
+        y_scores: numpy array of the same length as df_floats that assigns outlier scores to each observation
+                    according to fitted model.
+
+        clf_name: name of fitted model
 
     """
     if train_size > 1:
@@ -170,6 +197,7 @@ def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: 
 
     random_state = np.random.RandomState(42)
 
+    # TODO: Perform scaling of data for AKNN, CBLOF, HBOS, KNN, OCSVM
     classifiers = {
         'Average KNN (AKNN)': KNN(method='mean', contamination=outliers_fraction),
         'Cluster-based Local Outlier Factor (CBLOF)': CBLOF(contamination=outliers_fraction, check_estimator=False,
@@ -181,9 +209,6 @@ def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: 
         'One-Class SVM (OCSVM)': OCSVM(contamination=outliers_fraction),
         'Principal component analysis (PCA)': PCA(contamination=outliers_fraction)
     }
-
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    df_floats.iloc[:, [0, 1]] = scaler.fit_transform(df_floats.iloc[:, [0, 1]])
 
     x_train, x_test = train_test_split(df_floats, train_size=train_size)
 
@@ -202,11 +227,13 @@ def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: 
         raise NameError("Unknown classifier. "
                         "Please use one of those: {}.".format(list(classifiers.keys())))
 
-    for i, (clf_name, clf) in enumerate(classifiers.items()):
-        # fit model
-        clf.fit(df_floats)
-        # prediction of a datapoint category outlier or inlier
-        y_pred = clf.predict(df_floats)
+    # for i, (clf_name, clf) in enumerate(classifiers.items()):
+    #    scaler = MinMaxScaler(feature_range=(0, 1))
+    #    df_floats.iloc[:, [0, 1]] = scaler.fit_transform(df_floats.iloc[:, [0, 1]])
+    #    # fit model
+    #    clf.fit(df_floats)
+    #    # prediction of a datapoint category outlier or inlier
+    #    y_pred = clf.predict(df_floats)
 
     if plot_a:
         plot_outlier_detection(df_floats, y_pred, clf, clf_name)
@@ -231,11 +258,13 @@ def anomaly_report(df: pd.DataFrame, train_size: float = 0.8, outliers_rate: flo
 
             classifier: string representing name of anomaly detection algorithm.
 
+            plot_a: plots 2d contourf of anomaly detection scores.
+
         Returns
             -------
             df_modules_long_anomaly: pd.DataFrame with subset of dataset with measurements considered anomalous.
 
-            report_anomaly: object containing elements of anomaly evaluation.
+            report_obj: object containing elements of anomaly evaluation.
 
         """
     df = drop_missing(df)

@@ -6,4 +6,5 @@ loadforecast>=0.0.3
 pyod>=0.8.8
 sklearn
 numpy
+scipy
 matplotlib >= 3.4.1
