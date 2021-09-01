@@ -5,19 +5,57 @@ from pyod.models.iforest import IForest
 from matplotlib import pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 
-def resample_data(s, ratio=0.9):
-    tf = s['ds'].diff().value_counts()
 
+def get_sampling_frequency(s, ratio):
+    """Get sampling frequency of time-series data.
+
+    Function that returns the sampling frequency of time-series data
+
+        Function
+
+        Parameters
+        ----------
+        ratio:
+
+        s:
+
+        Returns
+        -------
+        The fitted Prophet object.
+
+        """
+    tf = s['ds'].dropna().diff().value_counts()
     counter = 0
+
     for i in range(len(tf)):
         counter += tf[i]
         if counter / sum(tf[:]) >= ratio:
             break
-
     if tf.index[i].days == 0:
         freq = str(tf.index[i].seconds) + "S"
     else:
         freq = str(tf.index[i].days) + "D"
+    return freq
+
+
+def resample_data(s: pd.DataFrame, ratio=0.9):
+    """Resample time-series data.
+
+    Function
+
+    Parameters
+    ----------
+    ratio:
+
+    s:
+
+    Returns
+    -------
+    The fitted Prophet object.
+
+    """
+
+    freq = get_sampling_frequency(s, ratio)
 
     s = s.set_index('ds').resample(freq).first().reset_index()
     s = s.dropna()
@@ -29,7 +67,8 @@ def anomaly_rate(model, validation_df, freq, plot=False):
     if freq[:-1].isnumeric() and (freq[-1] == 'S' or freq[-1] == 'D'):
         last_history = (model.start + model.t_scale).round(freq)
     else:
-        raise ValueError("Unsupported frequency format. Provide any valid frequency for pd.date_range, as multiple of 'D' or 'S'.")
+        raise ValueError("Unsupported frequency format. "
+                         "Provide any valid frequency for pd.date_range, as multiple of 'D' or 'S'.")
 
     first_validation = validation_df['ds'].iloc[0]
     last_validation = validation_df['ds'].iloc[-1]
