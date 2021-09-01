@@ -188,7 +188,7 @@ def plot_outlier_detection(df_floats: pd.DataFrame, y_pred: np.ndarray, clf, clf
     return
 
 
-def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: float, classifier: str = 'IForest',
+def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: float, classifier: str,
                  plot_a: bool = True):
     """ Return binary classified outlier and raw outlier score.
 
@@ -248,7 +248,6 @@ def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: 
         if classifier in name:
             clf_name = name
             break
-
     if clf_name:
         clf = classifiers.get(clf_name)
         clf.fit(x_train)
@@ -259,8 +258,6 @@ def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: 
                         'Please use one of those: {}.'.format(list(classifiers.keys())))
 
     # for i, (clf_name, clf) in enumerate(classifiers.items()):
-    #    scaler = MinMaxScaler(feature_range=(0, 1))
-    #    df_floats.iloc[:, [0, 1]] = scaler.fit_transform(df_floats.iloc[:, [0, 1]])
     #    # fit model
     #    clf.fit(df_floats)
     #    # prediction of a datapoint category outlier or inlier
@@ -275,7 +272,7 @@ def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: 
 
 
 def anomaly_report(df: pd.DataFrame, train_size: float = 0.8, outliers_rate: float = 0.003,
-                   classifier: str = 'IForest', plot_a: bool = True):
+                   classifier: str = 'K Nearest Neighbors', plot_a: bool = True):
     """ Return subset of df containing outliers and report.
 
         Performs preprocessing, feature engineering on dataset and trains anomaly detection model on
