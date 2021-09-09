@@ -4,7 +4,7 @@ import matplotlib
 from matplotlib import pyplot as plt
 from scipy.stats import stats
 from sklearn.model_selection import train_test_split
-# from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler
 from pyod.models.copod import COPOD
 from pyod.models.cblof import CBLOF
 from pyod.models.hbos import HBOS
@@ -26,7 +26,7 @@ def get_se_as_df(filename):
         data = json.loads(f.read())
     for record in data:
         for key, value in record.items():
-            if type(value)==dict:
+            if type(value) == dict:
                 # extract only kWh
                 kWh = value['energy_kWh']
                 record[key] = kWh
@@ -70,9 +70,9 @@ def get_yield(df_subset: pd.DataFrame, df_set: pd.DataFrame) -> pd.DataFrame:
 
     Parameters
         ----------
-        df_subset: pd.DataFrame with column names containing: ".*[set_specific_string]\..*".
+        df_subset: pd.DataFrame with column names containing: '.*[set_specific_string]\..*'.
 
-        df_set: pd.DataFrame with column names in format: ".*\s[set_specific_string]".
+        df_set: pd.DataFrame with column names in format: '.*\s[set_specific_string]'.
 
     Returns
         -------
@@ -93,7 +93,7 @@ def get_yield(df_subset: pd.DataFrame, df_set: pd.DataFrame) -> pd.DataFrame:
     return yield_modules
 
 
-def plot_outlier_detection(df_floats: pd.DataFrame, y_pred: np.ndarray, clf, clf_name: str = None):
+def plot_outlier_detection(df_floats: pd.DataFrame, y_pred: np.ndarray, clf, clf_name: str = None, scaler=None):
     """ Return contourf plot of the anomaly detection model.
 
         Plots contourf plot of decision scores marking area where datapoints would be considered inliers.
@@ -109,9 +109,11 @@ def plot_outlier_detection(df_floats: pd.DataFrame, y_pred: np.ndarray, clf, clf
 
             clf_name: name of fitted model.
 
+            scaler: estimator that was used to change range of df_floats DataFrame
+
         Returns
             -------
-            Contourf plot
+            Contourf plot.
 
         """
     if df_floats.shape[1] > 2:
@@ -119,24 +121,34 @@ def plot_outlier_detection(df_floats: pd.DataFrame, y_pred: np.ndarray, clf, clf
     elif df_floats.shape[1] < 2:
         print('Sorry can not plot less than one variable')
 
-    x_lim_min = df_floats.iloc[:, 0].min()
-    x_lim_max = df_floats.iloc[:, 0].max()
-    y_lim_min = df_floats.iloc[:, 1].min()
-    y_lim_max = df_floats.iloc[:, 1].max()
-    x_delta = 0.05 * (x_lim_max - x_lim_min)
-    y_delta = 0.05 * (y_lim_max - y_lim_min)
-
     # predict raw anomaly score
     scores_pred = clf.decision_function(df_floats.iloc[:, [0, 1]]) * -1
     # threshold value to consider a datapoint inlier or outlier
     threshold = stats.scoreatpercentile(scores_pred, 100 * len(y_pred[y_pred == 1]) / len(y_pred))
+
+    # Specifies interval over which the np.linspace will be created
+    x_lim_min, x_lim_max = df_floats.iloc[:, 0].min(), df_floats.iloc[:, 0].max()
+    x_delta = 0.05 * (x_lim_max - x_lim_min)
+    y_lim_min, y_lim_max = df_floats.iloc[:, 1].min(), df_floats.iloc[:, 1].max()
+    y_delta = 0.05 * (y_lim_max - y_lim_min)
     # coordinate array for vectorized evaluation of raw anomaly scores
     # TODO: Coarser grid sometimes returns error when plotting (threshold out of [zz.min();zz.max()]).
-    xx, yy = np.meshgrid(np.linspace(x_lim_min - x_delta, x_lim_max + x_delta, 1000),
-                         np.linspace(y_lim_min - y_delta, y_lim_max + y_delta, 1000))
+    xx, yy = np.meshgrid(np.linspace(x_lim_min - x_delta, x_lim_max + x_delta, 100),
+                         np.linspace(y_lim_min - y_delta, y_lim_max + y_delta, 100))
     # decision function calculates the raw anomaly score for every point
     zz = clf.decision_function(np.c_[xx.ravel(), yy.ravel()]) * -1
     zz = zz.reshape(xx.shape)
+
+    # undo the scaling so the plot is in the same scale as input data
+    if scaler:
+        df_floats.iloc[:, [0, 1]] = scaler.inverse_transform(df_floats.iloc[:, [0, 1]])
+        x_lim_min, x_lim_max = df_floats.iloc[:, 0].min(), df_floats.iloc[:, 0].max()
+        x_delta = 0.05 * (x_lim_max - x_lim_min)
+        y_lim_min, y_lim_max = df_floats.iloc[:, 1].min(), df_floats.iloc[:, 1].max()
+        y_delta = 0.05 * (y_lim_max - y_lim_min)
+        xx, yy = np.meshgrid(np.linspace(x_lim_min - x_delta, x_lim_max + x_delta, 100),
+                             np.linspace(y_lim_min - y_delta, y_lim_max + y_delta, 100))
+
     # inliers_1 - inlier feature 1,  inliers_2 - inlier feature 2
     inliers_1 = (df_floats.iloc[:, 0][y_pred == 0]).values.reshape(-1, 1)
     inliers_2 = (df_floats.iloc[:, 1][y_pred == 0]).values.reshape(-1, 1)
@@ -157,7 +169,6 @@ def plot_outlier_detection(df_floats: pd.DataFrame, y_pred: np.ndarray, clf, clf
     # draw outliers as black dots
     c = plt.scatter(outliers_1, outliers_2, c='black', s=20, edgecolor='k')
 
-    #
     plt.axis('tight')
     # loc=2 is used for the top left corner
     plt.legend(
@@ -177,7 +188,7 @@ def plot_outlier_detection(df_floats: pd.DataFrame, y_pred: np.ndarray, clf, clf
     return
 
 
-def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: float, classifier: str = 'IForest',
+def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: float, classifier: str,
                  plot_a: bool = True):
     """ Return binary classified outlier and raw outlier score.
 
@@ -203,7 +214,7 @@ def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: 
         y_scores: numpy array of the same length as df_floats that assigns outlier scores to each observation
                     according to fitted model.
 
-        clf_name: name of fitted model
+        clf_name: name of fitted model.
 
     """
     if train_size > 1:
@@ -214,7 +225,7 @@ def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: 
 
     random_state = np.random.RandomState(42)
 
-    # TODO: Perform scaling of data for AKNN, CBLOF, HBOS, KNN, OCSVM
+    # TODO: Perform scaling of data ONLY for AKNN, CBLOF, HBOS, KNN, OCSVM. Other classifiers are not influenced.
     classifiers = {
         'Average KNN (AKNN)': KNN(method='mean', contamination=outliers_fraction),
         'Cluster-based Local Outlier Factor (CBLOF)': CBLOF(contamination=outliers_fraction, check_estimator=False,
@@ -227,39 +238,42 @@ def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: 
         'Principal component analysis (PCA)': PCA(contamination=outliers_fraction)
     }
 
-    x_train, x_test = train_test_split(df_floats, train_size=train_size)
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    scaled = scaler.fit_transform(df_floats.iloc[:, [0, 1]])
+    df_scaled = pd.DataFrame(scaled, index=df_floats.index, columns= df_floats.columns)
+
+    x_train, x_test = train_test_split(df_scaled, train_size=train_size)
 
     clf_name = ''
     for name in classifiers.keys():
         if classifier in name:
             clf_name = name
             break
-
     if clf_name:
         clf = classifiers.get(clf_name)
         clf.fit(x_train)
-        y_pred = clf.predict(df_floats)  # binary labels (0: inliers, 1: outliers)
-        y_scores = clf.decision_function(df_floats)  # raw outlier scores
+        y_pred = clf.predict(df_scaled)  # binary labels (0: inliers, 1: outliers)
+        y_scores = clf.decision_function(df_scaled)  # raw outlier scores
     else:
-        raise NameError("Unknown classifier. "
-                        "Please use one of those: {}.".format(list(classifiers.keys())))
+        raise NameError('Unknown classifier. '
+                        'Please use one of those: {}.'.format(list(classifiers.keys())))
 
     # for i, (clf_name, clf) in enumerate(classifiers.items()):
-    #    scaler = MinMaxScaler(feature_range=(0, 1))
-    #    df_floats.iloc[:, [0, 1]] = scaler.fit_transform(df_floats.iloc[:, [0, 1]])
     #    # fit model
     #    clf.fit(df_floats)
     #    # prediction of a datapoint category outlier or inlier
     #    y_pred = clf.predict(df_floats)
 
     if plot_a:
-        plot_outlier_detection(df_floats, y_pred, clf, clf_name)
+        plot_outlier_detection(df_scaled, y_pred, clf, clf_name, scaler)
+
+    #df_floats.iloc[:, [0, 1]] = scaler.inverse_transform(df_floats.iloc[:, [0, 1]])
 
     return y_pred, y_scores, clf_name
 
 
-def anomaly_report(df: pd.DataFrame, train_size: float = 0.8, outliers_rate: float = 0.05,
-                   classifier: str = 'IForest', plot_a: bool = True):
+def anomaly_report(df: pd.DataFrame, train_size: float = 0.8, outliers_rate: float = 0.003,
+                   classifier: str = 'K Nearest Neighbors', plot_a: bool = True):
     """ Return subset of df containing outliers and report.
 
         Performs preprocessing, feature engineering on dataset and trains anomaly detection model on
@@ -322,16 +336,17 @@ def anomaly_report(df: pd.DataFrame, train_size: float = 0.8, outliers_rate: flo
     print("""\nREPORT\
             \n--------------------\
             \nUsed classifier: {}\
-            \nModel assumed {:.2f}% of outliers in randomly selected {:.0f}% of data from dataset.\
-            \nAnomaly rate of all modules in dataset is {:.2f}%. \nMost critical module is the {}.\
-            \nwith anomaly rate of {:.2f}%.\
-            \nDay that should be examined is {}.\
-            \nwith anomaly rate of {:.2f}%.\n--------------------\
+            \nClassifier assumed {:.2f}% of outliers in randomly selected {:.0f}% of data from dataset.\
+            \nAnomaly rate of all modules in dataset is {:.2f}%. \n\n{} requires your attention!\
+            \n{:.2f}% of observations of module were considered outliers.\
+            \n\n{} is the most suspicious day.\
+            \n{:.2f}% of observations of that day were considered outliers.\
+            \n\nCheck out the the returned dataframe with anomalous observations.\n--------------------\
             """.format(clf_name, outliers_rate * 100, train_size * 100, report_obj.anomaly_rate, report_obj.bad_module,
-                       report_obj.bad_module_rate, report_obj.bad_day.strftime("%Y-%m-%d"),
+                       report_obj.bad_module_rate, report_obj.bad_day.strftime('%Y-%m-%d'),
                        report_obj.bad_day_rate))
 
-    return df_modules_long_anomaly, report_obj
+    return df_modules_long_anomaly.sort_values('outlier_score', ascending=False), report_obj
 
 
 if __name__ == '__main__':
