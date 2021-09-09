@@ -239,9 +239,10 @@ def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: 
     }
 
     scaler = MinMaxScaler(feature_range=(0, 1))
-    df_floats.iloc[:, [0, 1]] = scaler.fit_transform(df_floats.iloc[:, [0, 1]])
+    scaled = scaler.fit_transform(df_floats.iloc[:, [0, 1]])
+    df_scaled = pd.DataFrame(scaled, index=df_floats.index, columns= df_floats.columns)
 
-    x_train, x_test = train_test_split(df_floats, train_size=train_size)
+    x_train, x_test = train_test_split(df_scaled, train_size=train_size)
 
     clf_name = ''
     for name in classifiers.keys():
@@ -251,8 +252,8 @@ def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: 
     if clf_name:
         clf = classifiers.get(clf_name)
         clf.fit(x_train)
-        y_pred = clf.predict(df_floats)  # binary labels (0: inliers, 1: outliers)
-        y_scores = clf.decision_function(df_floats)  # raw outlier scores
+        y_pred = clf.predict(df_scaled)  # binary labels (0: inliers, 1: outliers)
+        y_scores = clf.decision_function(df_scaled)  # raw outlier scores
     else:
         raise NameError('Unknown classifier. '
                         'Please use one of those: {}.'.format(list(classifiers.keys())))
@@ -264,9 +265,9 @@ def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: 
     #    y_pred = clf.predict(df_floats)
 
     if plot_a:
-        plot_outlier_detection(df_floats, y_pred, clf, clf_name, scaler)
+        plot_outlier_detection(df_scaled, y_pred, clf, clf_name, scaler)
 
-    df_floats.iloc[:, [0, 1]] = scaler.inverse_transform(df_floats.iloc[:, [0, 1]])
+    #df_floats.iloc[:, [0, 1]] = scaler.inverse_transform(df_floats.iloc[:, [0, 1]])
 
     return y_pred, y_scores, clf_name
 
