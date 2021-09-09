@@ -188,7 +188,7 @@ def plot_outlier_detection(df_floats: pd.DataFrame, y_pred: np.ndarray, clf, clf
     return
 
 
-def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: float, classifier: str,
+def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: float, classifier: str,
                  plot_a: bool = True):
     """ Return binary classified outlier and raw outlier score.
 
@@ -201,7 +201,7 @@ def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: 
 
         train_size: proportion of dataset to be used for training anomaly detection model.
 
-        outliers_fraction: proportion of training set to be considered outlier.
+        outliers_rate: proportion of training set to be considered outlier.
 
         classifier: string representing name of anomaly detection algorithm.
 
@@ -220,22 +220,22 @@ def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_fraction: 
     if train_size > 1:
         train_size = train_size / 100
     # TODO: Find out empirical way to set contamination level
-    if outliers_fraction >= 1:
-        outliers_fraction = outliers_fraction / 100
+    if outliers_rate >= 1:
+        outliers_rate = outliers_rate / 100
 
     random_state = np.random.RandomState(42)
 
     # TODO: Perform scaling of data ONLY for AKNN, CBLOF, HBOS, KNN, OCSVM. Other classifiers are not influenced.
     classifiers = {
-        'Average KNN (AKNN)': KNN(method='mean', contamination=outliers_fraction),
-        'Cluster-based Local Outlier Factor (CBLOF)': CBLOF(contamination=outliers_fraction, check_estimator=False,
+        'Average KNN (AKNN)': KNN(method='mean', contamination=outliers_rate),
+        'Cluster-based Local Outlier Factor (CBLOF)': CBLOF(contamination=outliers_rate, check_estimator=False,
                                                             random_state=random_state),
-        'Copula based Outlier Detection (COPOD)': COPOD(contamination=outliers_fraction),
-        'Histogram-base Outlier Detection (HBOS)': HBOS(contamination=outliers_fraction),
-        'Isolation Forest (IForest)': IForest(contamination=outliers_fraction, random_state=random_state),
-        'K Nearest Neighbors (KNN)': KNN(contamination=outliers_fraction),
-        'One-Class SVM (OCSVM)': OCSVM(contamination=outliers_fraction),
-        'Principal component analysis (PCA)': PCA(contamination=outliers_fraction)
+        'Copula based Outlier Detection (COPOD)': COPOD(contamination=outliers_rate),
+        'Histogram-base Outlier Detection (HBOS)': HBOS(contamination=outliers_rate),
+        'Isolation Forest (IForest)': IForest(contamination=outliers_rate, random_state=random_state),
+        'K Nearest Neighbors (KNN)': KNN(contamination=outliers_rate),
+        'One-Class SVM (OCSVM)': OCSVM(contamination=outliers_rate),
+        'Principal component analysis (PCA)': PCA(contamination=outliers_rate)
     }
 
     scaler = MinMaxScaler(feature_range=(0, 1))
