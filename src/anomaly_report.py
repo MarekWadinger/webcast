@@ -14,27 +14,11 @@ from pyod.models.pca import PCA
 from pyod.models.ocsvm import OCSVM
 
 import json
-# from src.se_api_process import get_se_as_df
-
+from src.se_api_download import get_se_daily
+from src.se_api_process import get_se_as_df
 
 class Report:
     pass
-
-
-def get_se_as_df(filename):
-    with open(filename) as f:
-        data = json.loads(f.read())
-    for record in data:
-        for key, value in record.items():
-            if type(value) == dict:
-                # extract only kWh
-                kWh = value['energy_kWh']
-                record[key] = kWh
-    df = pd.DataFrame(data)
-    # convert string to datetime object
-    df['created_on'] = pd.to_datetime(df['created_on'])
-    df = df.set_index('created_on')
-    return df
 
 
 def drop_missing(df: pd.DataFrame, valid_col_rate: float = 0.1) -> pd.DataFrame:
@@ -188,7 +172,7 @@ def plot_outlier_detection(df_floats: pd.DataFrame, y_pred: np.ndarray, clf, clf
     return
 
 
-def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: float, classifier: str,
+def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: float, classifier: str,
                  plot_a: bool = True):
     """ Return binary classified outlier and raw outlier score.
 
@@ -244,35 +228,38 @@ def find_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: floa
 
     x_train, x_test = train_test_split(df_scaled, train_size=train_size)
 
-    clf_name = ''
-    for name in classifiers.keys():
-        if classifier in name:
-            clf_name = name
-            break
-    if clf_name:
-        clf = classifiers.get(clf_name)
-        clf.fit(x_train)
-        y_pred = clf.predict(df_scaled)  # binary labels (0: inliers, 1: outliers)
-        y_scores = clf.decision_function(df_scaled)  # raw outlier scores
+    if classifier == 'all':
+        raise Warning('This option is currently unsupported.'
+                      '\nPlease use one of those classifiers:'
+                      '\n{}.'.format(list(classifiers.keys())))
+        for i, (clf_name, clf) in enumerate(classifiers.items()):
+            # fit model
+            clf.fit(x_train)
+            # prediction of a datapoint category outlier or inlier
+            y_pred = clf.predict(df_scaled)
+            plot_outlier_detection(df_scaled, y_pred, clf, clf_name, scaler)
     else:
-        raise NameError('Unknown classifier. '
-                        'Please use one of those: {}.'.format(list(classifiers.keys())))
+        clf_name = ''
+        for name in classifiers.keys():
+            if classifier in name:
+                clf_name = name
+                break
+        if clf_name:
+            clf = classifiers.get(clf_name)
+            clf.fit(x_train)
+            y_pred = clf.predict(df_scaled)  # binary labels (0: inliers, 1: outliers)
+            y_scores = clf.decision_function(df_scaled)  # raw outlier scores
+        else:
+            raise NameError('Unknown classifier. '
+                            'Please use one of those: {}.'.format(list(classifiers.keys())))
 
-    # for i, (clf_name, clf) in enumerate(classifiers.items()):
-    #    # fit model
-    #    clf.fit(df_floats)
-    #    # prediction of a datapoint category outlier or inlier
-    #    y_pred = clf.predict(df_floats)
-
-    if plot_a:
-        plot_outlier_detection(df_scaled, y_pred, clf, clf_name, scaler)
-
-    #df_floats.iloc[:, [0, 1]] = scaler.inverse_transform(df_floats.iloc[:, [0, 1]])
+        if plot_a:
+            plot_outlier_detection(df_scaled, y_pred, clf, clf_name, scaler)
 
     return y_pred, y_scores, clf_name
 
 
-def anomaly_report(df: pd.DataFrame, train_size: float = 0.8, outliers_rate: float = 0.003,
+def report_anomaly(df: pd.DataFrame, train_size: float = 0.8, outliers_rate: float = 0.003,
                    classifier: str = 'K Nearest Neighbors', plot_a: bool = True):
     """ Return subset of df containing outliers and report.
 
@@ -302,7 +289,7 @@ def anomaly_report(df: pd.DataFrame, train_size: float = 0.8, outliers_rate: flo
 
     df_strings = df[[i for i in df if 'String' in i]]
     df_modules = df[[i for i in df if 'Module' in i]]
-    # df_inverter = df[['Inverter 1']]
+    # df_inverters = df[[i for i in df if 'Inverter' in i]]
 
     yield_modules = get_yield(df_modules, df_strings)
 
@@ -310,7 +297,7 @@ def anomaly_report(df: pd.DataFrame, train_size: float = 0.8, outliers_rate: flo
     yield_modules_long = pd.melt(yield_modules.reset_index(), id_vars='created_on')
     df_modules_long = df_modules_long.assign(yields=yield_modules_long['value'])
 
-    y_pred, y_scores, clf_name = find_anomaly(df_modules_long[['value', 'yields']],
+    y_pred, y_scores, clf_name = detect_anomaly(df_modules_long[['value', 'yields']],
                                               train_size, outliers_rate, classifier, plot_a)
 
     df_modules_long = df_modules_long.assign(outlier=y_pred)
@@ -341,7 +328,7 @@ def anomaly_report(df: pd.DataFrame, train_size: float = 0.8, outliers_rate: flo
             \n{:.2f}% of observations of module were considered outliers.\
             \n\n{} is the most suspicious day.\
             \n{:.2f}% of observations of that day were considered outliers.\
-            \n\nCheck out the the returned dataframe with anomalous observations.\n--------------------\
+            \n\nCheck out the returned dataframe with anomalous observations.\n--------------------\
             """.format(clf_name, outliers_rate * 100, train_size * 100, report_obj.anomaly_rate, report_obj.bad_module,
                        report_obj.bad_module_rate, report_obj.bad_day.strftime('%Y-%m-%d'),
                        report_obj.bad_day_rate))
@@ -352,5 +339,5 @@ def anomaly_report(df: pd.DataFrame, train_size: float = 0.8, outliers_rate: flo
 if __name__ == '__main__':
     filename = '../se_daily.json'
     df = get_se_as_df(filename)
-    anomaly_df, report = anomaly_report(df)
+    anomaly_df, report = report_anomaly(df)
     print(anomaly_df.head())
