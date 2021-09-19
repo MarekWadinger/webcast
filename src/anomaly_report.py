@@ -1,12 +1,6 @@
 import numpy as np
 import pandas as pd
 
-import matplotlib
-from matplotlib import pyplot as plt
-import plotly.express as px
-import plotly
-plotly.offline.init_notebook_mode(connected=True)
-
 from typing import Union
 from pandas.core.frame import DataFrame
 from scipy.stats import stats
@@ -22,6 +16,12 @@ from pyod.models.ocsvm import OCSVM
 
 from src.se_api_download import get_se_daily
 from src.se_api_process import get_se_as_df
+
+import matplotlib
+from matplotlib import pyplot as plt
+import plotly.express as px
+import plotly
+plotly.offline.init_notebook_mode(connected=True)
 
 
 class Report:
@@ -71,18 +71,18 @@ def get_yield(df_subset: pd.DataFrame, df_set: pd.DataFrame) -> pd.DataFrame:
         pd.DataFrame with product of row-wise division with the same shape as df_subset.
 
     """
-    yield_modules = []
+    subsets_yield = []
     # Works with arrays
-    for string_id in df_set:
-        string_num = string_id.split(' ')[1] + '.'
+    for set_id in df_set:
+        set_num = set_id.split(' ')[1] + '.'
         # Returns array of modules belonging to given string
-        modules = df_subset[[module for module in df_subset if string_num in module]].T.values
-        temp_yield = np.divide(modules, df_set[string_id].values)
-        yield_modules = [*yield_modules, *temp_yield]
+        subsets = df_subset[[module for module in df_subset if set_num in module]].T.values
+        temp_yield = np.divide(subsets, df_set[set_id].values)
+        subsets_yield = [*subsets_yield, *temp_yield]
     # Transforms array to DataFrame
-    yield_modules = pd.DataFrame(np.transpose(yield_modules), index=df_subset.index, columns=df_subset.columns)
+    subsets_yield = pd.DataFrame(np.transpose(subsets_yield), index=df_subset.index, columns=df_subset.columns)
 
-    return yield_modules
+    return subsets_yield
 
 
 def plot_outlier_detection(df_floats: pd.DataFrame, y_pred: np.ndarray, clf, clf_name: str = None, scaler=None):
@@ -210,7 +210,7 @@ def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: fl
 
     """
     if df_floats.shape[0] < 8:
-        raise Warning('Not enough measurements. Please used DataFrame with at last 10 measurements.')
+        raise Warning('Not enough measurements. Please use DataFrame with at last 10 measurements.')
     if train_size > 1:
         train_size = train_size / 100
     # TODO: Find out empirical way to set contamination level - Tukey's method
