@@ -13,9 +13,9 @@ from pyod.models.knn import KNN
 from pyod.models.pca import PCA
 from pyod.models.ocsvm import OCSVM
 
-import json
 from src.se_api_download import get_se_daily
 from src.se_api_process import get_se_as_df
+
 
 class Report:
     pass
@@ -40,10 +40,11 @@ def drop_missing(df: pd.DataFrame, valid_col_rate: float = 0.1) -> pd.DataFrame:
         valid_col_rate = valid_col_rate / 100
 
     sum_na = df.isna().sum()
-    cols_drop = sum_na[sum_na / df.shape[1] > valid_col_rate].index.values
+    cols_drop = sum_na[sum_na / df.shape[0] > valid_col_rate].index.values
     df = df.drop(columns=cols_drop)
     df = df.dropna()
 
+    print('Dropped {} columns: {}'.format(cols_drop.shape[0], cols_drop))
     return df
 
 
@@ -103,7 +104,7 @@ def plot_outlier_detection(df_floats: pd.DataFrame, y_pred: np.ndarray, clf, clf
     if df_floats.shape[1] > 2:
         print('Plotting first two variables')
     elif df_floats.shape[1] < 2:
-        print('Sorry can not plot less than one variable')
+        print('Sorry can not plot less than two variables')
 
     # predict raw anomaly score
     scores_pred = clf.decision_function(df_floats.iloc[:, [0, 1]]) * -1
@@ -173,7 +174,7 @@ def plot_outlier_detection(df_floats: pd.DataFrame, y_pred: np.ndarray, clf, clf
 
 
 def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: float, classifier: str,
-                 plot_a: bool = True):
+                   plot_a: bool = True):
     """ Return binary classified outlier and raw outlier score.
 
     Performs training of anomaly detection model on subset of dataset and returns
@@ -201,9 +202,11 @@ def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: fl
         clf_name: name of fitted model.
 
     """
+    if df_floats.shape[0] < 8:
+        raise Warning('Not enough measurements. Please used DataFrame with at last 10 measurements.')
     if train_size > 1:
         train_size = train_size / 100
-    # TODO: Find out empirical way to set contamination level
+    # TODO: Find out empirical way to set contamination level - Tukey's method
     if outliers_rate >= 1:
         outliers_rate = outliers_rate / 100
 
@@ -224,7 +227,7 @@ def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: fl
 
     scaler = MinMaxScaler(feature_range=(0, 1))
     scaled = scaler.fit_transform(df_floats.iloc[:, [0, 1]])
-    df_scaled = pd.DataFrame(scaled, index=df_floats.index, columns= df_floats.columns)
+    df_scaled = pd.DataFrame(scaled, index=df_floats.index, columns=df_floats.columns)
 
     x_train, x_test = train_test_split(df_scaled, train_size=train_size)
 
@@ -232,12 +235,12 @@ def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: fl
         raise Warning('This option is currently unsupported.'
                       '\nPlease use one of those classifiers:'
                       '\n{}.'.format(list(classifiers.keys())))
-        for i, (clf_name, clf) in enumerate(classifiers.items()):
-            # fit model
-            clf.fit(x_train)
-            # prediction of a datapoint category outlier or inlier
-            y_pred = clf.predict(df_scaled)
-            plot_outlier_detection(df_scaled, y_pred, clf, clf_name, scaler)
+        # for i, (clf_name, clf) in enumerate(classifiers.items()):
+        #    # fit model
+        #    clf.fit(x_train)
+        #    # prediction of a datapoint category outlier or inlier
+        #    y_pred = clf.predict(df_scaled)
+        #    plot_outlier_detection(df_scaled, y_pred, clf, clf_name, scaler)
     else:
         clf_name = ''
         for name in classifiers.keys():
@@ -259,8 +262,43 @@ def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: fl
     return y_pred, y_scores, clf_name
 
 
-def report_anomaly(df: pd.DataFrame, train_size: float = 0.8, outliers_rate: float = 0.003,
-                   classifier: str = 'K Nearest Neighbors', plot_a: bool = True):
+def report_anomaly(df_long):
+    df_long_anomaly = df_long[df_long['outlier'] == 1]
+
+    if df_long_anomaly.shape[0] > 0:
+        report_obj = Report()
+        report_obj.anomaly_rate = round(df_long_anomaly.shape[0] / df_long.shape[0] * 100, 2)
+
+        report_obj.bad_module = df_long_anomaly.groupby(['variable']).count()['outlier'].idxmax()
+        sum_bad_module_anomaly = df_long_anomaly[df_long_anomaly['variable'] == report_obj.bad_module].shape[0]
+        sum_bad_module = df_long[df_long['variable'] == report_obj.bad_module].shape[0]
+        report_obj.bad_module_rate = round(sum_bad_module_anomaly / sum_bad_module * 100, 2)
+
+        report_obj.bad_day = df_long_anomaly.groupby(['created_on']).count()['outlier'].idxmax()
+        sum_bad_day_anomaly = df_long_anomaly[df_long_anomaly['created_on'] == report_obj.bad_day].shape[0]
+        sum_bad_day = df_long[df_long['created_on'] == report_obj.bad_day].shape[0]
+        report_obj.bad_day_rate = round(sum_bad_day_anomaly / sum_bad_day * 100, 2)
+
+        print("""\nREPORT\
+                 \n--------------------\n{} requires your attention!\
+                 \n{:.2f}% of observations of module were considered outliers.\
+                 \n\n{} is the most suspicious day.\
+                 \n{:.2f}% of observations of that day were considered outliers.\
+                 \n\nCheck out the returned dataframe with anomalous observations.\n--------------------\
+                 """.format(report_obj.bad_module, report_obj.bad_module_rate,
+                            report_obj.bad_day.strftime('%Y-%m-%d'),
+                            report_obj.bad_day_rate))
+    else:
+        report_obj = Report()
+        print("""\nREPORT\
+                    \n--------------------\
+                    \nCongrats, your modules work just fine. :)""")
+
+    return report_obj
+
+
+def get_anomaly(df: pd.DataFrame, train_size: float = 0.8, outliers_rate: float = 0.003,
+                classifier: str = 'K Nearest Neighbors', plot_a: bool = True):
     """ Return subset of df containing outliers and report.
 
         Performs preprocessing, feature engineering on dataset and trains anomaly detection model on
@@ -298,46 +336,25 @@ def report_anomaly(df: pd.DataFrame, train_size: float = 0.8, outliers_rate: flo
     df_modules_long = df_modules_long.assign(yields=yield_modules_long['value'])
 
     y_pred, y_scores, clf_name = detect_anomaly(df_modules_long[['value', 'yields']],
-                                              train_size, outliers_rate, classifier, plot_a)
+                                                train_size, outliers_rate, classifier, plot_a)
 
     df_modules_long = df_modules_long.assign(outlier=y_pred)
     df_modules_long = df_modules_long.assign(outlier_score=y_scores)
 
-    df_modules_long_anomaly = df_modules_long[df_modules_long['outlier'] == 1]
+    anomaly_rate = round(df_modules_long[df_modules_long['outlier'] == 1].shape[0] / df_modules_long.shape[0] * 100, 2)
 
-    report_obj = Report()
-    report_obj.anomaly_rate = round(df_modules_long_anomaly.shape[0] / df_modules_long.shape[0] * 100, 2)
+    print("""\nUsed classifier: {}\
+             \nClassifier assumed {:.2f}% of outliers in randomly selected {:.0f}% of data from dataset.\
+             \nAnomaly rate of all modules in dataset is {:.2f}%.
+             """.format(clf_name, outliers_rate * 100, train_size * 100, anomaly_rate, ))
 
-    report_obj.bad_module = df_modules_long_anomaly.groupby(['variable']).count()['outlier'].idxmax()
-    sum_bad_module_anomaly = df_modules_long_anomaly[df_modules_long_anomaly['variable'] ==
-                                                     report_obj.bad_module].shape[0]
-    sum_bad_module = df_modules_long[df_modules_long['variable'] == report_obj.bad_module].shape[0]
-    report_obj.bad_module_rate = round(sum_bad_module_anomaly / sum_bad_module * 100, 2)
+    reporting = report_anomaly(df_modules_long)
 
-    report_obj.bad_day = df_modules_long_anomaly.groupby(['created_on']).count()['outlier'].idxmax()
-    sum_bad_day_anomaly = df_modules_long_anomaly[df_modules_long_anomaly['created_on'] ==
-                                                  report_obj.bad_day].shape[0]
-    sum_bad_day = df_modules_long[df_modules_long['created_on'] == report_obj.bad_day].shape[0]
-    report_obj.bad_day_rate = round(sum_bad_day_anomaly / sum_bad_day * 100, 2)
-
-    print("""\nREPORT\
-            \n--------------------\
-            \nUsed classifier: {}\
-            \nClassifier assumed {:.2f}% of outliers in randomly selected {:.0f}% of data from dataset.\
-            \nAnomaly rate of all modules in dataset is {:.2f}%. \n\n{} requires your attention!\
-            \n{:.2f}% of observations of module were considered outliers.\
-            \n\n{} is the most suspicious day.\
-            \n{:.2f}% of observations of that day were considered outliers.\
-            \n\nCheck out the returned dataframe with anomalous observations.\n--------------------\
-            """.format(clf_name, outliers_rate * 100, train_size * 100, report_obj.anomaly_rate, report_obj.bad_module,
-                       report_obj.bad_module_rate, report_obj.bad_day.strftime('%Y-%m-%d'),
-                       report_obj.bad_day_rate))
-
-    return df_modules_long_anomaly.sort_values('outlier_score', ascending=False), report_obj
+    return df_modules_long.sort_values('outlier_score', ascending=False), reporting
 
 
 if __name__ == '__main__':
     filename = '../se_daily.json'
     df = get_se_as_df(filename)
-    anomaly_df, report = report_anomaly(df)
+    anomaly_df, report = get_anomaly(df)
     print(anomaly_df.head())
