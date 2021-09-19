@@ -1,7 +1,14 @@
 import numpy as np
 import pandas as pd
+
 import matplotlib
 from matplotlib import pyplot as plt
+import plotly.express as px
+import plotly
+plotly.offline.init_notebook_mode(connected=True)
+
+from typing import Union
+from pandas.core.frame import DataFrame
 from scipy.stats import stats
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
@@ -174,7 +181,7 @@ def plot_outlier_detection(df_floats: pd.DataFrame, y_pred: np.ndarray, clf, clf
 
 
 def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: float, classifier: str,
-                   plot_a: bool = True):
+                   plot: bool = False):
     """ Return binary classified outlier and raw outlier score.
 
     Performs training of anomaly detection model on subset of dataset and returns
@@ -190,7 +197,7 @@ def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: fl
 
         classifier: string representing name of anomaly detection algorithm.
 
-        plot_a: plots 2d contourf of anomaly detection scores.
+        plot: plots 2d contourf of anomaly detection scores.
 
     Returns
         -------
@@ -256,7 +263,7 @@ def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: fl
             raise NameError('Unknown classifier. '
                             'Please use one of those: {}.'.format(list(classifiers.keys())))
 
-        if plot_a:
+        if plot:
             plot_outlier_detection(df_scaled, y_pred, clf, clf_name, scaler)
 
     return y_pred, y_scores, clf_name
@@ -297,16 +304,27 @@ def report_anomaly(df_long):
     return report_obj
 
 
-def get_anomaly(df: pd.DataFrame, train_size: float = 0.8, outliers_rate: float = 0.003,
-                classifier: str = 'K Nearest Neighbors', plot_a: bool = True):
-    """ Return subset of df containing outliers and report.
+def plot_anomaly(df_long):
+    df_long_anomaly = df_long[df_long['outlier'] == 1]
+    df_long['SMA_scores'] = np.nan
+    for i in df_long_anomaly['variable'].unique():
+        df_long['SMA_scores'] = df_long['SMA_scores'].fillna(df_long[df_long['variable'] == i]
+                                                             ['outlier_score'].rolling(window=7).mean())
+    fig = px.line(df_long.dropna(), x='created_on', y='SMA_scores', hover_data=df_long.columns, color='variable')
+    plotly.offline.plot(fig)
+    return
+
+
+def get_anomaly(data: Union[DataFrame, str, None] = None, train_size: float = 0.8, outliers_rate: float = 0.003,
+                classifier: str = 'K Nearest Neighbors', plot_a: bool = False):
+    """ Return df containing outlier scores, outlier tags and report.
 
         Performs preprocessing, feature engineering on dataset and trains anomaly detection model on
         randomly selected subset of dataset. Returns subset of df that was considered anomalous with report.
 
         Parameters
             ----------
-            df: pd.DataFrame.
+            data: pd.DataFrame.
 
             train_size: proportion of dataset to be used for training anomaly detection model.
 
@@ -323,6 +341,16 @@ def get_anomaly(df: pd.DataFrame, train_size: float = 0.8, outliers_rate: float 
             report_obj: object containing elements of anomaly evaluation.
 
         """
+    if isinstance(data, DataFrame):
+        df = data
+    elif isinstance(data, str):
+        df = get_se_as_df(data)
+    elif data is None:
+        get_se_daily()
+        df = get_se_as_df('se_daily.json')
+    else:
+        raise TypeError('Wrong data type.')
+
     df = drop_missing(df)
 
     df_strings = df[[i for i in df if 'String' in i]]
@@ -349,6 +377,7 @@ def get_anomaly(df: pd.DataFrame, train_size: float = 0.8, outliers_rate: float 
              """.format(clf_name, outliers_rate * 100, train_size * 100, anomaly_rate, ))
 
     reporting = report_anomaly(df_modules_long)
+    plot_anomaly(df_modules_long)
 
     return df_modules_long.sort_values('outlier_score', ascending=False), reporting
 
