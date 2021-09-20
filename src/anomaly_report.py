@@ -308,8 +308,9 @@ def plot_anomaly(df_long):
     df_long_anomaly = df_long[df_long['outlier'] == 1]
     df_long['SMA_scores'] = np.nan
     for i in df_long_anomaly['variable'].unique():
-        df_long['SMA_scores'] = df_long['SMA_scores'].fillna(df_long[df_long['variable'] == i]
-                                                             ['outlier_score'].rolling(window=7).mean())
+        if df_long_anomaly[df_long_anomaly['variable'] == i]['variable'].count() > 1:
+            df_long['SMA_scores'] = df_long['SMA_scores'].fillna(df_long[df_long['variable'] == i]
+                                                                 ['outlier_score'].rolling(window=7).mean())
     fig = px.line(df_long.dropna(), x='created_on', y='SMA_scores', hover_data=df_long.columns, color='variable')
     plotly.offline.plot(fig)
     return
