@@ -14,8 +14,8 @@ from pyod.models.knn import KNN
 from pyod.models.pca import PCA
 from pyod.models.ocsvm import OCSVM
 
-from src.se_api_download import get_se_daily
-from src.se_api_process import get_se_as_df
+from se_api_download import get_se_daily
+from se_api_process import get_se_as_df
 
 import matplotlib
 from matplotlib import pyplot as plt
