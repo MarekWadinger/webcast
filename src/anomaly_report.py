@@ -56,22 +56,30 @@ def drop_missing(df: pd.DataFrame, valid_col_rate: float = 0.1) -> pd.DataFrame:
     return df
 
 
-def get_yield(df_subset: pd.DataFrame, df_set: pd.DataFrame) -> pd.DataFrame:
+def get_yield(df: pd.DataFrame, name_subset: str, name_set: str) -> pd.DataFrame:
     """ Return product of row-wise division.
 
     Perform row-wise division between transposed subset and set to which it belongs.
 
     Parameters
         ----------
-        df_subset: pd.DataFrame with column names containing: '.*[set_specific_string]\..*'.
+        df: pd.DataFrame with column names containing: '.*[name_subset]\..*'
+            and '.*[name_set]\..*'.
 
-        df_set: pd.DataFrame with column names in format: '.*\s[set_specific_string]'.
+        name_subset: string specific for subset columns name. Sum of subset cols for
+                     one measurement should be equal to set.
+
+        name_set: string specific for set column name.
 
     Returns
         -------
         pd.DataFrame with product of row-wise division with the same shape as df_subset.
 
     """
+
+    df_subset = df[[i for i in df if name_subset in i]]
+    df_set = df[[i for i in df if name_set in i]]
+
     subsets_yield = []
     # Works with arrays
     for set_id in df_set:
@@ -354,18 +362,15 @@ def tidy_anomaly(data: Union[DataFrame, str, None] = None, train_size: float = 0
 
     df = drop_missing(df)
 
+    yield_modules = get_yield(df, 'Module', 'String')
+
     df_modules = df[[i for i in df if 'Module' in i]]
-    df_strings = df[[i for i in df if 'String' in i]]
-    # df_inverters = df[[i for i in df if 'Inverter' in i]]
-
-    yield_modules = get_yield(df_modules, df_strings)
-
     df_modules_long = pd.melt(df_modules.reset_index(), id_vars='created_on')
     yield_modules_long = pd.melt(yield_modules.reset_index(), id_vars='created_on')
     df_modules_long = df_modules_long.assign(yields=yield_modules_long['value'])
 
     y_pred, y_scores = detect_anomaly(df_modules_long[['value', 'yields']],
-                                                train_size, outliers_rate, classifier, plot_a)
+                                      train_size, outliers_rate, classifier, plot_a)
 
     df_modules_long = df_modules_long.assign(outlier=y_pred)
     df_modules_long = df_modules_long.assign(outlier_score=y_scores)
