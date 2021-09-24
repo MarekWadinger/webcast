@@ -207,8 +207,6 @@ def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: fl
         y_scores: numpy array of the same length as df_floats that assigns outlier scores to each observation
                     according to fitted model.
 
-        clf_name: name of fitted model.
-
     """
     if df_floats.shape[0] < 8:
         raise Warning('Not enough measurements. Please use DataFrame with at last 10 measurements.')
@@ -256,6 +254,7 @@ def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: fl
                 clf_name = name
                 break
         if clf_name:
+            print("\nUsed classifier: {}".format(clf_name))
             clf = classifiers.get(clf_name)
             clf.fit(x_train)
             y_pred = clf.predict(df_scaled)  # binary labels (0: inliers, 1: outliers)
@@ -267,7 +266,7 @@ def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: fl
         if plot:
             plot_outlier_detection(df_scaled, y_pred, clf, clf_name, scaler)
 
-    return y_pred, y_scores, clf_name
+    return y_pred, y_scores
 
 
 def report_anomaly(df_long):
@@ -365,7 +364,7 @@ def tidy_anomaly(data: Union[DataFrame, str, None] = None, train_size: float = 0
     yield_modules_long = pd.melt(yield_modules.reset_index(), id_vars='created_on')
     df_modules_long = df_modules_long.assign(yields=yield_modules_long['value'])
 
-    y_pred, y_scores, clf_name = detect_anomaly(df_modules_long[['value', 'yields']],
+    y_pred, y_scores = detect_anomaly(df_modules_long[['value', 'yields']],
                                                 train_size, outliers_rate, classifier, plot_a)
 
     df_modules_long = df_modules_long.assign(outlier=y_pred)
@@ -373,10 +372,9 @@ def tidy_anomaly(data: Union[DataFrame, str, None] = None, train_size: float = 0
 
     anomaly_rate = round(df_modules_long[df_modules_long['outlier'] == 1].shape[0] / df_modules_long.shape[0] * 100, 2)
 
-    print("""\nUsed classifier: {}\
-             \nClassifier assumed {:.2f}% of outliers in randomly selected {:.0f}% of data from dataset.\
+    print("""\nClassifier assumed {:.2f}% of outliers in randomly selected {:.0f}% of data from dataset.\
              \nAnomaly rate of all modules in dataset is {:.2f}%.
-             """.format(clf_name, outliers_rate * 100, train_size * 100, anomaly_rate, ))
+             """.format(outliers_rate * 100, train_size * 100, anomaly_rate, ))
 
     reporting = report_anomaly(df_modules_long)
     plot_anomaly(df_modules_long)
