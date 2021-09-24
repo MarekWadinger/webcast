@@ -233,8 +233,9 @@ def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: fl
 
     scaler = MinMaxScaler(feature_range=(0, 1))
     scaled = scaler.fit_transform(df_floats.iloc[:, [0, 1]])
+    df_scaled = pd.DataFrame(scaled, index=df_floats.index, columns=df_floats.columns)
 
-    x_train, x_test = train_test_split(scaled, train_size=train_size)
+    x_train, x_test = train_test_split(df_scaled, train_size=train_size)
 
     if classifier == 'all':
         raise Warning('This option is currently unsupported.'
@@ -256,8 +257,8 @@ def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: fl
             print("\nUsed classifier: {}".format(clf_name))
             clf = classifiers.get(clf_name)
             clf.fit(x_train)
-            y_pred = clf.predict(scaled)  # binary labels (0: inliers, 1: outliers)
-            y_scores = clf.decision_function(scaled)  # raw outlier scores
+            y_pred = clf.predict(df_scaled)  # binary labels (0: inliers, 1: outliers)
+            y_scores = clf.decision_function(df_scaled)  # raw outlier scores
         else:
             raise NameError('Unknown classifier. '
                             'Please use one of those: {}.'.format(list(classifiers.keys())))
