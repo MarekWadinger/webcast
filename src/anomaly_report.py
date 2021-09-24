@@ -233,9 +233,8 @@ def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: fl
 
     scaler = MinMaxScaler(feature_range=(0, 1))
     scaled = scaler.fit_transform(df_floats.iloc[:, [0, 1]])
-    df_scaled = pd.DataFrame(scaled, index=df_floats.index, columns=df_floats.columns)
 
-    x_train, x_test = train_test_split(df_scaled, train_size=train_size)
+    x_train, x_test = train_test_split(scaled, train_size=train_size)
 
     if classifier == 'all':
         raise Warning('This option is currently unsupported.'
@@ -257,8 +256,8 @@ def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: fl
             print("\nUsed classifier: {}".format(clf_name))
             clf = classifiers.get(clf_name)
             clf.fit(x_train)
-            y_pred = clf.predict(df_scaled)  # binary labels (0: inliers, 1: outliers)
-            y_scores = clf.decision_function(df_scaled)  # raw outlier scores
+            y_pred = clf.predict(scaled)  # binary labels (0: inliers, 1: outliers)
+            y_scores = clf.decision_function(scaled)  # raw outlier scores
         else:
             raise NameError('Unknown classifier. '
                             'Please use one of those: {}.'.format(list(classifiers.keys())))
@@ -378,6 +377,78 @@ def tidy_anomaly(data: Union[DataFrame, str, None] = None, train_size: float = 0
 
     reporting = report_anomaly(df_modules_long)
     plot_anomaly(df_modules_long)
+
+    return df_modules_long.sort_values('outlier_score', ascending=False), reporting
+
+
+def tidy_individual_anomaly(data: Union[DataFrame, str, None] = None, train_size: float = 0.8,
+                            outliers_rate: float = 0.0046, classifier: str = 'K Nearest Neighbors',
+                            plot_a: bool = False):
+    """ Return df containing outlier scores, outlier tags and report.
+
+        Performs preprocessing, feature engineering on dataset and trains anomaly detection model on
+        randomly selected subset of dataset. Returns subset of df that was considered anomalous with report.
+
+        Parameters
+            ----------
+            data: pd.DataFrame.
+
+            train_size: proportion of dataset to be used for training anomaly detection model.
+
+            outliers_rate: proportion of training set to be considered outlier.
+
+            classifier: string representing name of anomaly detection algorithm.
+
+            plot_a: plots 2d contourf of anomaly detection scores.
+
+        Returns
+            -------
+            df_modules_long_anomaly: pd.DataFrame with subset of dataset with measurements considered anomalous.
+
+            report_obj: object containing elements of anomaly evaluation.
+
+        """
+    if isinstance(data, DataFrame):
+        df = data
+    elif isinstance(data, str):
+        df = get_se_as_df(data)
+    elif data is None:
+        get_se_daily()
+        df = get_se_as_df('se_daily.json')
+    else:
+        raise TypeError('Wrong data type.')
+
+    df = drop_missing(df)
+
+    df_modules = df[[i for i in df if 'Module' in i]]
+    df_strings = df[[i for i in df if 'String' in i]]
+    # df_inverters = df[[i for i in df if 'Inverter' in i]]
+
+    yield_modules = get_yield(df_modules, df_strings)
+
+    df_modules_long = pd.melt(df_modules.reset_index(), id_vars='created_on')
+    yield_modules_long = pd.melt(yield_modules.reset_index(), id_vars='created_on')
+    df_modules_long = df_modules_long.assign(yields=yield_modules_long['value'])
+
+    df_modules_long['outlier_score'] = np.nan
+    df_modules_long['outlier'] = np.nan
+
+    for i in df_modules_long['variable'].unique():
+        print(i)
+        df_new = df_modules_long[df_modules_long['variable'] == i][['value', 'yields']]
+        y_pred, y_scores = detect_anomaly(df_new, train_size=0.8, outliers_rate=0.0046,
+                                                    classifier="K Nearest", plot=False)
+        df_modules_long['outlier_score'] = df_modules_long['outlier_score'].fillna(pd.Series(y_scores))
+        df_modules_long['outlier'] = df_modules_long['outlier'].fillna(pd.Series(y_pred))
+
+    anomaly_rate = round(df_modules_long[df_modules_long['outlier'] == 1].shape[0] / df_modules_long.shape[0] * 100, 2)
+
+    print("""\nClassifier assumed {:.2f}% of outliers in randomly selected {:.0f}% of data from dataset.\
+             \nAnomaly rate of all modules in dataset is {:.2f}%.
+             """.format(outliers_rate * 100, train_size * 100, anomaly_rate, ))
+
+    reporting = report_anomaly(df_modules_long)
+    #plot_anomaly(df_modules_long)
 
     return df_modules_long.sort_values('outlier_score', ascending=False), reporting
 
