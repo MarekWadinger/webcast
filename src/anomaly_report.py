@@ -36,7 +36,8 @@ def drop_missing(df: pd.DataFrame, valid_col_rate: float = 0.1) -> pd.DataFrame:
         df: pd.DataFrame
 
         valid_col_rate: float representing the maximum % proportion of NAs in column
-                        to be still considered valid.
+                        to be still considered valid. 0 means that we drop all columns
+                        having at last one missing.
 
     Returns
         -------
@@ -316,8 +317,8 @@ def plot_anomaly(df_long):
     return
 
 
-def get_anomaly(data: Union[DataFrame, str, None] = None, train_size: float = 0.8, outliers_rate: float = 0.003,
-                classifier: str = 'K Nearest Neighbors', plot_a: bool = False):
+def tidy_anomaly(data: Union[DataFrame, str, None] = None, train_size: float = 0.8, outliers_rate: float = 0.003,
+                 classifier: str = 'K Nearest Neighbors', plot_a: bool = False):
     """ Return df containing outlier scores, outlier tags and report.
 
         Performs preprocessing, feature engineering on dataset and trains anomaly detection model on
@@ -354,8 +355,8 @@ def get_anomaly(data: Union[DataFrame, str, None] = None, train_size: float = 0.
 
     df = drop_missing(df)
 
-    df_strings = df[[i for i in df if 'String' in i]]
     df_modules = df[[i for i in df if 'Module' in i]]
+    df_strings = df[[i for i in df if 'String' in i]]
     # df_inverters = df[[i for i in df if 'Inverter' in i]]
 
     yield_modules = get_yield(df_modules, df_strings)
@@ -386,5 +387,5 @@ def get_anomaly(data: Union[DataFrame, str, None] = None, train_size: float = 0.
 if __name__ == '__main__':
     filename = '../se_daily.json'
     df = get_se_as_df(filename)
-    anomaly_df, report = get_anomaly(df)
+    anomaly_df, report = tidy_anomaly(df)
     print(anomaly_df.head())
