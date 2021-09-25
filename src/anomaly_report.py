@@ -1,11 +1,18 @@
 import numpy as np
 import pandas as pd
 
+import matplotlib
+from matplotlib import pyplot as plt
+import plotly.express as px
+import plotly
+
 from typing import Union
 from pandas.core.frame import DataFrame
 from scipy.stats import stats
+
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
+
 from pyod.models.copod import COPOD
 from pyod.models.cblof import CBLOF
 from pyod.models.hbos import HBOS
@@ -17,10 +24,6 @@ from pyod.models.ocsvm import OCSVM
 from se_api_download import get_se_daily
 from se_api_process import get_se_as_df
 
-import matplotlib
-from matplotlib import pyplot as plt
-import plotly.express as px
-import plotly
 plotly.offline.init_notebook_mode(connected=True)
 
 
@@ -36,7 +39,8 @@ def drop_missing(df: pd.DataFrame, valid_col_rate: float = 0.1) -> pd.DataFrame:
         df: pd.DataFrame
 
         valid_col_rate: float representing the maximum % proportion of NAs in column
-                        to be still considered valid.
+                        to be still considered valid. 0 means that we drop all columns
+                        having at last one missing.
 
     Returns
         -------
@@ -55,22 +59,30 @@ def drop_missing(df: pd.DataFrame, valid_col_rate: float = 0.1) -> pd.DataFrame:
     return df
 
 
-def get_yield(df_subset: pd.DataFrame, df_set: pd.DataFrame) -> pd.DataFrame:
+def get_yield(df: pd.DataFrame, name_subset: str, name_set: str) -> pd.DataFrame:
     """ Return product of row-wise division.
 
     Perform row-wise division between transposed subset and set to which it belongs.
 
     Parameters
         ----------
-        df_subset: pd.DataFrame with column names containing: '.*[set_specific_string]\..*'.
+        df: pd.DataFrame with column names containing: '.*[name_subset]\..*'
+            and '.*[name_set]\..*'.
 
-        df_set: pd.DataFrame with column names in format: '.*\s[set_specific_string]'.
+        name_subset: string specific for subset columns name. Sum of subset cols for
+                     one measurement should be equal to set.
+
+        name_set: string specific for set column name.
 
     Returns
         -------
         pd.DataFrame with product of row-wise division with the same shape as df_subset.
 
     """
+
+    df_subset = df[[i for i in df if name_subset in i]]
+    df_set = df[[i for i in df if name_set in i]]
+
     subsets_yield = []
     # Works with arrays
     for set_id in df_set:
@@ -85,16 +97,16 @@ def get_yield(df_subset: pd.DataFrame, df_set: pd.DataFrame) -> pd.DataFrame:
     return subsets_yield
 
 
-def plot_outlier_detection(df_floats: pd.DataFrame, y_pred: np.ndarray, clf, clf_name: str = None, scaler=None):
+def plot_outlier_detection(df_floats: pd.DataFrame, y_labels: np.ndarray, clf, clf_name: str = None, scaler=None):
     """ Return contourf plot of the anomaly detection model.
 
-        Plots contourf plot of decision scores marking area where datapoints would be considered inliers.
+        Plots contourf plot of decision scores marking area where observations would be considered inliers.
 
         Parameters
             ----------
             df_floats: pd.DataFrame with elements as floats.
 
-            y_pred: numpy array of the same length as df_floats that assigns 0/1 (inlier/outlier) to each observation
+            y_labels: numpy array of the same length as df_floats that assigns 0/1 (inlier/outlier) to each observation
                     according to fitted model.
 
             clf: fitted model.
@@ -109,14 +121,15 @@ def plot_outlier_detection(df_floats: pd.DataFrame, y_pred: np.ndarray, clf, clf
 
         """
     if df_floats.shape[1] > 2:
-        print('Plotting first two variables')
+        print('Plotting first two variables...')
     elif df_floats.shape[1] < 2:
-        print('Sorry can not plot less than two variables')
+        print('Sorry can not plot less than two variables.')
+        return
 
     # predict raw anomaly score
-    scores_pred = clf.decision_function(df_floats.iloc[:, [0, 1]]) * -1
+    y_scores = clf.decision_function(df_floats.iloc[:, [0, 1]]) * -1
     # threshold value to consider a datapoint inlier or outlier
-    threshold = stats.scoreatpercentile(scores_pred, 100 * len(y_pred[y_pred == 1]) / len(y_pred))
+    threshold = stats.scoreatpercentile(y_scores, 100 * len(y_labels[y_labels == 1]) / len(y_labels))
 
     # Specifies interval over which the np.linspace will be created
     x_lim_min, x_lim_max = df_floats.iloc[:, 0].min(), df_floats.iloc[:, 0].max()
@@ -142,11 +155,11 @@ def plot_outlier_detection(df_floats: pd.DataFrame, y_pred: np.ndarray, clf, clf
                              np.linspace(y_lim_min - y_delta, y_lim_max + y_delta, 100))
 
     # inliers_1 - inlier feature 1,  inliers_2 - inlier feature 2
-    inliers_1 = (df_floats.iloc[:, 0][y_pred == 0]).values.reshape(-1, 1)
-    inliers_2 = (df_floats.iloc[:, 1][y_pred == 0]).values.reshape(-1, 1)
+    inliers_1 = (df_floats.iloc[:, 0][y_labels == 0]).values.reshape(-1, 1)
+    inliers_2 = (df_floats.iloc[:, 1][y_labels == 0]).values.reshape(-1, 1)
     # outliers_1 - outlier feature 1, outliers_2 - outlier feature 2
-    outliers_1 = df_floats.iloc[:, 0][y_pred == 1].values.reshape(-1, 1)
-    outliers_2 = df_floats.iloc[:, 1][y_pred == 1].values.reshape(-1, 1)
+    outliers_1 = df_floats.iloc[:, 0][y_labels == 1].values.reshape(-1, 1)
+    outliers_2 = df_floats.iloc[:, 1][y_labels == 1].values.reshape(-1, 1)
 
     plt.figure(figsize=(10, 10))
     # fill blue map colormap from minimum anomaly score to threshold value
@@ -201,12 +214,10 @@ def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: fl
 
     Returns
         -------
-        y_pred: numpy array of the same length as df_floats that assigns 0/1 (inlier/outlier) to each observation
+        y_labels: numpy array of the same length as df_floats that assigns 0/1 (inlier/outlier) to each observation
                     according to fitted model.
         y_scores: numpy array of the same length as df_floats that assigns outlier scores to each observation
                     according to fitted model.
-
-        clf_name: name of fitted model.
 
     """
     if df_floats.shape[0] < 8:
@@ -233,7 +244,7 @@ def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: fl
     }
 
     scaler = MinMaxScaler(feature_range=(0, 1))
-    scaled = scaler.fit_transform(df_floats.iloc[:, [0, 1]])
+    scaled = scaler.fit_transform(df_floats)
     df_scaled = pd.DataFrame(scaled, index=df_floats.index, columns=df_floats.columns)
 
     x_train, x_test = train_test_split(df_scaled, train_size=train_size)
@@ -246,8 +257,8 @@ def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: fl
         #    # fit model
         #    clf.fit(x_train)
         #    # prediction of a datapoint category outlier or inlier
-        #    y_pred = clf.predict(df_scaled)
-        #    plot_outlier_detection(df_scaled, y_pred, clf, clf_name, scaler)
+        #    y_labels = clf.predict(df_scaled)
+        #    plot_outlier_detection(df_scaled, y_labels, clf, clf_name, scaler)
     else:
         clf_name = ''
         for name in classifiers.keys():
@@ -255,46 +266,57 @@ def detect_anomaly(df_floats: pd.DataFrame, train_size: float, outliers_rate: fl
                 clf_name = name
                 break
         if clf_name:
+            # print("\nUsed classifier: {}".format(clf_name))
             clf = classifiers.get(clf_name)
             clf.fit(x_train)
-            y_pred = clf.predict(df_scaled)  # binary labels (0: inliers, 1: outliers)
+            y_labels = clf.predict(df_scaled)  # binary labels (0: inliers, 1: outliers)
             y_scores = clf.decision_function(df_scaled)  # raw outlier scores
         else:
             raise NameError('Unknown classifier. '
                             'Please use one of those: {}.'.format(list(classifiers.keys())))
 
         if plot:
-            plot_outlier_detection(df_scaled, y_pred, clf, clf_name, scaler)
+            plot_outlier_detection(df_scaled, y_labels, clf, clf_name, scaler)
 
-    return y_pred, y_scores, clf_name
+    return y_labels, y_scores
 
 
-def report_anomaly(df_long):
-    df_long_anomaly = df_long[df_long['outlier'] == 1]
+def report_anomaly(df_outliers) -> Report:
+    """ Return report object and prints out reporting.
 
-    if df_long_anomaly.shape[0] > 0:
+        Parameters
+            ----------
+            df_outliers: pd.DataFrame in wide format containing outlier labels.
+
+        Returns
+            -------
+            Report object with reporting entities.
+
+        """
+    if df_outliers.astype(bool).sum().sum() > 0:
         report_obj = Report()
-        report_obj.anomaly_rate = round(df_long_anomaly.shape[0] / df_long.shape[0] * 100, 2)
+        report_obj.anomaly_rate = round((df_outliers.values == 1).sum() / df_outliers.size * 100, 2)
 
-        report_obj.bad_module = df_long_anomaly.groupby(['variable']).count()['outlier'].idxmax()
-        sum_bad_module_anomaly = df_long_anomaly[df_long_anomaly['variable'] == report_obj.bad_module].shape[0]
-        sum_bad_module = df_long[df_long['variable'] == report_obj.bad_module].shape[0]
+        report_obj.bad_module = df_outliers.astype(bool).sum().idxmax()
+        sum_bad_module_anomaly = df_outliers[report_obj.bad_module].sum()
+        sum_bad_module = df_outliers[report_obj.bad_module].count()
         report_obj.bad_module_rate = round(sum_bad_module_anomaly / sum_bad_module * 100, 2)
 
-        report_obj.bad_day = df_long_anomaly.groupby(['created_on']).count()['outlier'].idxmax()
-        sum_bad_day_anomaly = df_long_anomaly[df_long_anomaly['created_on'] == report_obj.bad_day].shape[0]
-        sum_bad_day = df_long[df_long['created_on'] == report_obj.bad_day].shape[0]
+        report_obj.bad_day = df_outliers.astype(bool).sum(axis=1).idxmax()
+        sum_bad_day_anomaly = df_outliers.loc[report_obj.bad_day].sum()
+        sum_bad_day = df_outliers.loc[report_obj.bad_day].count()
         report_obj.bad_day_rate = round(sum_bad_day_anomaly / sum_bad_day * 100, 2)
 
         print("""\nREPORT\
-                 \n--------------------\n{} requires your attention!\
+                 \n--------------------\nAnomaly rate of all modules in dataset is {:.2f}%.\
+                 \n\n{} requires your attention!\
                  \n{:.2f}% of observations of module were considered outliers.\
                  \n\n{} is the most suspicious day.\
                  \n{:.2f}% of observations of that day were considered outliers.\
                  \n\nCheck out the returned dataframe with anomalous observations.\n--------------------\
-                 """.format(report_obj.bad_module, report_obj.bad_module_rate,
-                            report_obj.bad_day.strftime('%Y-%m-%d'),
-                            report_obj.bad_day_rate))
+                 """.format(report_obj.anomaly_rate, report_obj.bad_module, report_obj.bad_module_rate,
+                            report_obj.bad_day.strftime('%Y-%m-%d'), report_obj.bad_day_rate))
+
     else:
         report_obj = Report()
         print("""\nREPORT\
@@ -304,19 +326,100 @@ def report_anomaly(df_long):
     return report_obj
 
 
-def plot_anomaly(df_long):
-    df_long_anomaly = df_long[df_long['outlier'] == 1]
-    df_long['SMA_scores'] = np.nan
-    for i in df_long_anomaly['variable'].unique():
-        df_long['SMA_scores'] = df_long['SMA_scores'].fillna(df_long[df_long['variable'] == i]
-                                                             ['outlier_score'].rolling(window=7).mean())
-    fig = px.line(df_long.dropna(), x='created_on', y='SMA_scores', hover_data=df_long.columns, color='variable')
-    plotly.offline.plot(fig)
+def plot_anomaly(df_outliers, df_scores):
+    """ Return timeline plot containing modules with at last 5 anomalous observations.
+
+            Parameters
+                ----------
+                df_outliers: pd.DataFrame in wide format containing outlier labels.
+
+                df_scores: pd.DataFrame in wide format containing outlier scores.
+
+            """
+    df_anomaly = df_outliers.sum()[df_outliers.sum() > 0]
+
+    df_sma_scores = pd.DataFrame(index=df_scores.index)
+    for i in df_anomaly.index.values:
+        if df_anomaly[i] > 5:
+            df_sma_scores[i] = df_scores[i].rolling(window=7).mean()
+    if not df_sma_scores.empty:
+        fig = px.line(pd.melt(df_sma_scores.reset_index(), id_vars='created_on'), x='created_on', y='value',
+                      color='variable', title='Daily outlier score (7-day moving average)')
+        plotly.offline.plot(fig)
     return
 
 
-def get_anomaly(data: Union[DataFrame, str, None] = None, train_size: float = 0.8, outliers_rate: float = 0.003,
-                classifier: str = 'K Nearest Neighbors', plot_a: bool = False):
+def tidy_detection(data: Union[DataFrame, str, None] = None, train_size: float = 0.8, outliers_rate: float = 0.0046,
+                   classifier: str = 'K Nearest Neighbors', report: bool = False, plot: bool = False):
+    """ Return dfs containing modules, yields, outlier tags and outlier scores.
+
+        Performs preprocessing, feature engineering on dataset and trains anomaly detection model on
+        randomly selected subset of dataset. Returns subset of df that was considered anomalous with report.
+
+        Parameters
+            ----------
+            data: pd.DataFrame.
+
+            train_size: proportion of dataset to be used for training anomaly detection model.
+
+            outliers_rate: proportion of training set to be considered outlier.
+
+            classifier: string representing name of anomaly detection algorithm.
+
+            report: bool that specifies whether or not to print out report.
+
+            plot: plots 2d contourf of anomaly detection scores.
+
+        Returns
+            -------
+            df_modules: pd.DataFrame with subset of input df containing only modules.
+
+            df_yields: pd.DataFrame with individual modules contribution toward whole production on string.
+
+            df_outliers: pd.DataFrame containing outlier labels.
+
+            df_scores: pd.DataFrame containing outlier scores.
+
+        """
+    if isinstance(data, DataFrame):
+        df = data
+    elif isinstance(data, str):
+        df = get_se_as_df(data)
+    elif data is None:
+        get_se_daily()
+        df = get_se_as_df('se_daily.json')
+    else:
+        raise TypeError('Wrong data type.')
+
+    df = drop_missing(df)
+
+    df_modules = df[[i for i in df if 'Module' in i]]
+    df_yields = get_yield(df, 'Module', 'String')
+
+    df_modules_long = pd.melt(df_modules.reset_index(), id_vars='created_on')
+    df_yields_long = pd.melt(df_yields.reset_index(), id_vars='created_on')
+    df_modules_long = df_modules_long.assign(yields=df_yields_long['value'])
+
+    y_labels, y_scores = detect_anomaly(df_modules_long[['value', 'yields']],
+                                        train_size, outliers_rate, classifier)
+
+    df_modules_long = df_modules_long.assign(outlier=y_labels)
+    df_modules_long = df_modules_long.assign(outlier_score=y_scores)
+
+    df_outliers = df_modules_long.pivot('created_on', 'variable', 'outlier')
+    df_scores = df_modules_long.pivot('created_on', 'variable', 'outlier_score')
+
+    if report:
+        report_anomaly(df_outliers)
+    if plot:
+        plot_anomaly(df_outliers, df_scores)
+
+    return df_modules, df_yields, df_outliers, df_scores
+
+
+def tidy_individual_detection(data: Union[DataFrame, str, None] = None, train_size: float = 0.8,
+                              outliers_rate: float = 0.0046, classifier: str = 'K Nearest Neighbors',
+                              report: bool = False, plot: bool = False):
     """ Return df containing outlier scores, outlier tags and report.
 
         Performs preprocessing, feature engineering on dataset and trains anomaly detection model on
@@ -332,58 +435,56 @@ def get_anomaly(data: Union[DataFrame, str, None] = None, train_size: float = 0.
 
             classifier: string representing name of anomaly detection algorithm.
 
-            plot_a: plots 2d contourf of anomaly detection scores.
+            report: bool that specifies whether or not to print out report.
+
+            plot: plots 2d contourf of anomaly detection scores.
 
         Returns
             -------
-            df_modules_long_anomaly: pd.DataFrame with subset of dataset with measurements considered anomalous.
+            df_modules: pd.DataFrame with subset of input df containing only modules.
+            
+            df_yields: pd.DataFrame with individual modules contribution toward whole production on string.
 
-            report_obj: object containing elements of anomaly evaluation.
+            df_outliers: pd.DataFrame containing outlier labels.
+
+            df_scores: pd.DataFrame containing outlier scores.
 
         """
-    if isinstance(data, DataFrame):
-        df = data
-    elif isinstance(data, str):
-        df = get_se_as_df(data)
-    elif data is None:
-        get_se_daily()
-        df = get_se_as_df('se_daily.json')
-    else:
-        raise TypeError('Wrong data type.')
+    df_modules, df_yields, df_outliers_temp, df_scores_temp = tidy_detection(data, train_size, outliers_rate,
+                                                                             classifier)
 
-    df = drop_missing(df)
+    df_outliers = pd.DataFrame(index=df_modules.index)
+    df_scores = pd.DataFrame(index=df_modules.index)
 
-    df_strings = df[[i for i in df if 'String' in i]]
-    df_modules = df[[i for i in df if 'Module' in i]]
-    # df_inverters = df[[i for i in df if 'Inverter' in i]]
+    for i in df_modules.columns.values:
+        mean_score = df_scores_temp[i].mean()
+        std_score_all = df_scores_temp.std().mean()
+        outs = df_scores_temp[i][df_scores_temp[i] < mean_score - 3 * std_score_all].count()
+        outs = outs + df_scores_temp[i][df_scores_temp[i] > mean_score + 3 * std_score_all].count()
+        outs = outs / df_modules.__len__()
 
-    yield_modules = get_yield(df_modules, df_strings)
+        # Upper and lower bound handling.
+        if outs > 0.5:
+            outs = 0.5
+        elif outs == 0:
+            outs = 0.00001
 
-    df_modules_long = pd.melt(df_modules.reset_index(), id_vars='created_on')
-    yield_modules_long = pd.melt(yield_modules.reset_index(), id_vars='created_on')
-    df_modules_long = df_modules_long.assign(yields=yield_modules_long['value'])
+        y_labels, y_scores = detect_anomaly(pd.concat([df_modules[i], df_yields[i]], axis=1),
+                                            train_size, outs, classifier, False)
 
-    y_pred, y_scores, clf_name = detect_anomaly(df_modules_long[['value', 'yields']],
-                                                train_size, outliers_rate, classifier, plot_a)
+        df_outliers[i] = y_labels
+        df_scores[i] = y_scores
 
-    df_modules_long = df_modules_long.assign(outlier=y_pred)
-    df_modules_long = df_modules_long.assign(outlier_score=y_scores)
+    if report:
+        report_anomaly(df_outliers)
+    if plot:
+        plot_anomaly(df_outliers, df_scores)
 
-    anomaly_rate = round(df_modules_long[df_modules_long['outlier'] == 1].shape[0] / df_modules_long.shape[0] * 100, 2)
-
-    print("""\nUsed classifier: {}\
-             \nClassifier assumed {:.2f}% of outliers in randomly selected {:.0f}% of data from dataset.\
-             \nAnomaly rate of all modules in dataset is {:.2f}%.
-             """.format(clf_name, outliers_rate * 100, train_size * 100, anomaly_rate, ))
-
-    reporting = report_anomaly(df_modules_long)
-    plot_anomaly(df_modules_long)
-
-    return df_modules_long.sort_values('outlier_score', ascending=False), reporting
+    return df_modules, df_yields, df_outliers, df_scores
 
 
 if __name__ == '__main__':
     filename = '../se_daily.json'
-    df = get_se_as_df(filename)
-    anomaly_df, report = get_anomaly(df)
-    print(anomaly_df.head())
+    df_se = get_se_as_df(filename)
+    modules, yields, outliers, scores = tidy_individual_detection(df_se)
+    print(scores.head())
