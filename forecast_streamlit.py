@@ -1,29 +1,30 @@
 # streamlit run forecast_streamlit.py
-import streamlit as st
-import pandas as pd
 import base64
 import json
 import time
 
-from prophet.serialize import model_to_json
-from prophet.plot import plot_plotly, plot_components_plotly
-
+import pandas as pd
+import streamlit as st
 from loadforecast.forecaster import LoadProphet
 from loadforecast.model_load import model_load
-from src.anomaly import resample_data, anomaly_rate
+from prophet.plot import plot_components_plotly, plot_plotly
+from prophet.serialize import model_to_json
+
+from src.anomaly import anomaly_rate, resample_data
 
 
 @st.cache_data()
 def modify_data(csv_data_file):
     df = pd.read_csv(csv_data_file)
-    df_new = df[['DateTime', 'Load']].rename(columns={'DateTime': 'ds', 'Load': 'y'})
+    df_new = df[['DateTime', 'Load']].rename(
+        columns={'DateTime': 'ds', 'Load': 'y'})
     df_new['ds'] = pd.to_datetime(df_new['ds'])
     return df_new
 
 
 @st.cache_resource()
-def build_model(df, pre_model, country, chps, sps, hps, ds, ws, ys):
-    model = LoadProphet(df, pretrained_model=pre_model, country=country, changepoint_prior_scale=chps,
+def build_model(df, _pre_model, country, chps, sps, hps, ds, ws, ys):
+    model = LoadProphet(df, pretrained_model=_pre_model, country=country, changepoint_prior_scale=chps,
                         seasonality_prior_scale=sps, holidays_prior_scale=hps, daily_seasonality=ds,
                         weekly_seasonality=ws, yearly_seasonality=ys)
     return model
@@ -35,14 +36,16 @@ def predict_future(_model, period):
 
 
 def save_csv(df_forecast):
-    csv = df_forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].to_csv().encode()
+    csv = df_forecast[['ds', 'yhat', 'yhat_lower',
+                       'yhat_upper']].to_csv().encode()
     b64 = base64.b64encode(csv).decode()
     href = f'<a href="data:file/csv;base64,{b64}" download="load_forecast.csv" target="_blank">Download csv file</a>'
     return href
 
 
 def save_json(df_forecast):
-    json_file = df_forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].to_json().encode()
+    json_file = df_forecast[['ds', 'yhat',
+                             'yhat_lower', 'yhat_upper']].to_json().encode()
     b64 = base64.b64encode(json_file).decode()
     href = f'<a href="data:file/json;base64,{b64}" download="load_forecast.json" target="_blank">Download json file</a>'
     return href
@@ -59,14 +62,17 @@ def model_json(model):
 
 # Build web app
 # -----------------------------------------------------------------------------
-st.title("""Electrical load forecast 
+st.title("""Electrical load forecast
 Using  *fbprophet*""")
 col1, col2 = st.columns(2)
 with col1:
-    data_file = st.file_uploader('Import data as csv file. Data should have two columns named DateTime and Load.')
+    data_file = st.file_uploader(
+        'Import data as csv file. Data should have two columns named DateTime and Load.')
 with col2:
-    model_file = st.file_uploader('Import pretrained model as json file. Without pretrained model app trains a new one.')
-user_period = st.slider('Prediction period in days:', min_value=1, max_value=14, value=1, step=1, )
+    model_file = st.file_uploader(
+        'Import pretrained model as json file. Without pretrained model app trains a new one.')
+user_period = st.slider('Prediction period in days:',
+                        min_value=1, max_value=14, value=1, step=1, )
 user_plot = st.button('Plot forecast')
 p1 = st.empty()
 p2 = st.empty()
@@ -81,17 +87,25 @@ with st.sidebar:
     st.caption('https://github.com/dr-prodigy/python-holidays')
     st.subheader('Change with caution:')
     with st.form(key='Model Parameters'):
-        user_chps = st.slider('Changepoint Prior Scale', min_value=0.001, max_value=0.050, value=0.001, step=0.001, format='%.3f')
-        user_sps = st.slider('Seasonality Prior Scale', min_value=0.01, max_value=10.00, value=10.00, step=0.01)
-        user_hps = st.slider('Holidays Prior Scale', min_value=0.01, max_value=10.00, value=0.1, step=0.01)
-        user_ds = st.selectbox('Daily Seasonality', [True, False, 'auto'], index=0)
-        user_ws = st.selectbox('Weekly Seasonality', [True, False, 'auto', 'Custom'], index=3)
-        st.caption('To use "Custom" Weekly Seasonality submit "Custom" and then change value')
+        user_chps = st.slider('Changepoint Prior Scale', min_value=0.001,
+                              max_value=0.050, value=0.001, step=0.001, format='%.3f')
+        user_sps = st.slider('Seasonality Prior Scale',
+                             min_value=0.01, max_value=10.00, value=10.00, step=0.01)
+        user_hps = st.slider(
+            'Holidays Prior Scale', min_value=0.01, max_value=10.00, value=0.1, step=0.01)
+        user_ds = st.selectbox('Daily Seasonality', [
+                               True, False, 'auto'], index=0)
+        user_ws = st.selectbox('Weekly Seasonality', [
+                               True, False, 'auto', 'Custom'], index=3)
+        st.caption(
+            'To use "Custom" Weekly Seasonality submit "Custom" and then change value')
         weekly_placeholder = st.empty()
-        user_ys = st.selectbox('Yearly Seasonality', [True, False, 'auto'], index=1)
+        user_ys = st.selectbox('Yearly Seasonality', [
+                               True, False, 'auto'], index=1)
         submit_button = st.form_submit_button(label='Submit')
         if user_ws == 'Custom':
-            user_ws = weekly_placeholder.slider('Weekly seasonality', min_value=0, max_value=100, value=28, step=2)
+            user_ws = weekly_placeholder.slider(
+                'Weekly seasonality', min_value=0, max_value=100, value=28, step=2)
 
 if data_file:
     data_frame = modify_data(data_file)
@@ -100,12 +114,15 @@ if data_file:
         attr_dict = json.loads(json.load(model_file))
         m = model_load(attr_dict)
         df_resampled, frequency = resample_data(data_frame)
-        anomaly_proportion = anomaly_rate(m, df_resampled, frequency, plot=False)
-        p1.info('Anomaly proportion between prediction and validation data is **%.2f %%**' % (anomaly_proportion*100))
+        anomaly_proportion = anomaly_rate(
+            m, df_resampled, frequency, plot=False)
+        p1.info('Anomaly proportion between prediction and validation data is **%.2f %%**' %
+                (anomaly_proportion*100))
         if anomaly_proportion > 0.1:
             p2.info('Model is outdated. Warm fitting new model...')
             start_time = time.time()
-            m = build_model(data_frame, m, user_country, user_chps, user_sps, user_hps, user_ds, user_ws, user_ys)
+            m = build_model(data_frame, m, user_country, user_chps,
+                            user_sps, user_hps, user_ds, user_ws, user_ys)
             fitting_time = time.time() - start_time
         else:
             p2.info('Model is up-to-date and ready for prediction.')
@@ -113,14 +130,16 @@ if data_file:
     else:
         p2.info('Fitting new model...')
         start_time = time.time()
-        m = build_model(data_frame, None, user_country, user_chps, user_sps, user_hps, user_ds, user_ws, user_ys)
+        m = build_model(data_frame, None, user_country, user_chps,
+                        user_sps, user_hps, user_ds, user_ws, user_ys)
         fitting_time = time.time() - start_time
 
     p3.info('Making prediction...')
     start_time = time.time()
     forecast = predict_future(m, user_period)
     prediction_time = time.time() - start_time
-    p3.success('Prediction made with success. Fitting time: **%.2f s**. Prediction time: **%.2f s**.' % (fitting_time, prediction_time))
+    p3.success('Prediction made with success. Fitting time: **%.2f s**. Prediction time: **%.2f s**.' %
+               (fitting_time, prediction_time))
 
     st.subheader('Download prediction')
     st.markdown(save_json(forecast), unsafe_allow_html=True)

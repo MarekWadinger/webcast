@@ -1,8 +1,9 @@
-import pandas as pd
 import time
 
-from pyod.models.iforest import IForest
+import pandas as pd
+from loadforecast.forecaster import LoadProphet
 from matplotlib import pyplot as plt
+from pyod.models.iforest import IForest
 from sklearn.preprocessing import MinMaxScaler
 
 
@@ -63,7 +64,11 @@ def resample_data(s: pd.DataFrame, ratio=0.9):
     return s, freq
 
 
-def anomaly_rate(model, validation_df, freq, plot=False):
+def anomaly_rate(
+        model: LoadProphet,
+        validation_df: pd.DataFrame,
+        freq,
+        plot=False):
     if freq[:-1].isnumeric() and (freq[-1] == 'S' or freq[-1] == 'D'):
         last_history = (model.start + model.t_scale).round(freq)
     else:
@@ -79,7 +84,7 @@ def anomaly_rate(model, validation_df, freq, plot=False):
 
         start_timer = time.time()
         future = validation_df['ds'].to_frame(name='ds')
-        prediction_data = model.predict(future)[['ds', 'yhat']]     # TOO SLOW!
+        prediction_data = model.predict(future)[['ds', 'yhat']]  # TOO SLOW!
         print("--- Prediction: %s seconds ---" % (time.time() - start_timer))
 
         df = pd.DataFrame({'y': validation_df['y'].values, 'yhat': prediction_data['yhat'].values})
