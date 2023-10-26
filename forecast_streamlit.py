@@ -1,4 +1,4 @@
-# streamlit run C:\Users\marek\PycharmProjects\pythonProject\Load_forecast_streamlit.py
+# streamlit run forecast_streamlit.py
 import streamlit as st
 import pandas as pd
 import base64
@@ -13,7 +13,7 @@ from loadforecast.model_load import model_load
 from src.anomaly import resample_data, anomaly_rate
 
 
-@st.cache(suppress_st_warning=True)
+@st.cache_data()
 def modify_data(csv_data_file):
     df = pd.read_csv(csv_data_file)
     df_new = df[['DateTime', 'Load']].rename(columns={'DateTime': 'ds', 'Load': 'y'})
@@ -21,7 +21,7 @@ def modify_data(csv_data_file):
     return df_new
 
 
-@st.cache(suppress_st_warning=True)
+@st.cache_resource()
 def build_model(df, pre_model, country, chps, sps, hps, ds, ws, ys):
     model = LoadProphet(df, pretrained_model=pre_model, country=country, changepoint_prior_scale=chps,
                         seasonality_prior_scale=sps, holidays_prior_scale=hps, daily_seasonality=ds,
@@ -29,9 +29,9 @@ def build_model(df, pre_model, country, chps, sps, hps, ds, ws, ys):
     return model
 
 
-@st.cache(suppress_st_warning=True)
-def predict_future(model, period):
-    return model.prediction(prediction_periods=period*24*4, frequency='15min')
+@st.cache_resource()
+def predict_future(_model, period):
+    return _model.prediction(prediction_periods=period*24*4, frequency='15min')
 
 
 def save_csv(df_forecast):
@@ -61,7 +61,7 @@ def model_json(model):
 # -----------------------------------------------------------------------------
 st.title("""Electrical load forecast 
 Using  *fbprophet*""")
-col1, col2 = st.beta_columns(2)
+col1, col2 = st.columns(2)
 with col1:
     data_file = st.file_uploader('Import data as csv file. Data should have two columns named DateTime and Load.')
 with col2:
