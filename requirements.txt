@@ -1,7 +1,6 @@
 loadforecast==0.0.4
 matplotlib==3.8.0
-numpy==1.26.1
-pandas==2.1.1
+pandas~=1.3.0
 plotly==5.18.0
 prophet==1.1.5
 pyod==1.1.1
