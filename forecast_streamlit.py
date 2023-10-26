@@ -24,9 +24,15 @@ def modify_data(csv_data_file):
 
 @st.cache_resource()
 def build_model(df, _pre_model, country, chps, sps, hps, ds, ws, ys):
-    model = LoadProphet(df, pretrained_model=_pre_model, country=country, changepoint_prior_scale=chps,
-                        seasonality_prior_scale=sps, holidays_prior_scale=hps, daily_seasonality=ds,
-                        weekly_seasonality=ws, yearly_seasonality=ys)
+    model = LoadProphet(
+        df, pretrained_model=_pre_model,
+        country=country,
+        changepoint_prior_scale=chps,
+        seasonality_prior_scale=sps,
+        holidays_prior_scale=hps,
+        daily_seasonality=ds,
+        weekly_seasonality=ws,
+        yearly_seasonality=ys)
     return model
 
 
@@ -39,7 +45,9 @@ def save_csv(df_forecast):
     csv = df_forecast[['ds', 'yhat', 'yhat_lower',
                        'yhat_upper']].to_csv().encode()
     b64 = base64.b64encode(csv).decode()
-    href = f'<a href="data:file/csv;base64,{b64}" download="load_forecast.csv" target="_blank">Download csv file</a>'
+    href = (f'<a href="data:file/csv;base64,{b64}" '
+            'download="load_forecast.csv" '
+            'target="_blank">Download csv file</a>')
     return href
 
 
@@ -47,7 +55,9 @@ def save_json(df_forecast):
     json_file = df_forecast[['ds', 'yhat',
                              'yhat_lower', 'yhat_upper']].to_json().encode()
     b64 = base64.b64encode(json_file).decode()
-    href = f'<a href="data:file/json;base64,{b64}" download="load_forecast.json" target="_blank">Download json file</a>'
+    href = (f'<a href="data:file/json;base64,{b64}" '
+            'download="load_forecast.json" '
+            'target="_blank">Download json file</a>')
     return href
 
 
@@ -55,8 +65,9 @@ def model_json(model):
     json_file = model_to_json(model)
     json_file = json.dumps(json_file)
     b64 = base64.b64encode(json_file.encode()).decode()
-    href = f'<a href="data:file/json;base64,{b64}" download="loadForecast_model.json" ' \
-           f'target="_blank">Download model</a>'
+    href = (f'<a href="data:file/json;base64,{b64}" '
+            'download="loadForecast_model.json" '
+            'target="_blank">Download model</a>')
     return href
 
 
@@ -67,10 +78,12 @@ Using  *fbprophet*""")
 col1, col2 = st.columns(2)
 with col1:
     data_file = st.file_uploader(
-        'Import data as csv file. Data should have two columns named DateTime and Load.')
+        'Import data as csv file. Data should have two columns named DateTime '
+        'and Load.')
 with col2:
     model_file = st.file_uploader(
-        'Import pretrained model as json file. Without pretrained model app trains a new one.')
+        'Import pretrained model as json file. Without pretrained model app '
+        'trains a new one.')
 user_period = st.slider('Prediction period in days:',
                         min_value=1, max_value=14, value=1, step=1, )
 user_plot = st.button('Plot forecast')
@@ -87,10 +100,13 @@ with st.sidebar:
     st.caption('https://github.com/dr-prodigy/python-holidays')
     st.subheader('Change with caution:')
     with st.form(key='Model Parameters'):
-        user_chps = st.slider('Changepoint Prior Scale', min_value=0.001,
-                              max_value=0.050, value=0.001, step=0.001, format='%.3f')
-        user_sps = st.slider('Seasonality Prior Scale',
-                             min_value=0.01, max_value=10.00, value=10.00, step=0.01)
+        user_chps = st.slider(
+            'Changepoint Prior Scale',
+            min_value=0.001, max_value=0.050, value=0.001,
+            step=0.001, format='%.3f')
+        user_sps = st.slider(
+            'Seasonality Prior Scale',
+            min_value=0.01, max_value=10.00, value=10.00, step=0.01)
         user_hps = st.slider(
             'Holidays Prior Scale', min_value=0.01, max_value=10.00, value=0.1, step=0.01)
         user_ds = st.selectbox('Daily Seasonality', [
@@ -98,14 +114,16 @@ with st.sidebar:
         user_ws = st.selectbox('Weekly Seasonality', [
                                True, False, 'auto', 'Custom'], index=3)
         st.caption(
-            'To use "Custom" Weekly Seasonality submit "Custom" and then change value')
+            'To use "Custom" Weekly Seasonality submit "Custom" and then '
+            'change value')
         weekly_placeholder = st.empty()
         user_ys = st.selectbox('Yearly Seasonality', [
                                True, False, 'auto'], index=1)
         submit_button = st.form_submit_button(label='Submit')
         if user_ws == 'Custom':
             user_ws = weekly_placeholder.slider(
-                'Weekly seasonality', min_value=0, max_value=100, value=28, step=2)
+                'Weekly seasonality',
+                min_value=0, max_value=100, value=28, step=2)
 
 if data_file:
     data_frame = modify_data(data_file)
@@ -116,8 +134,9 @@ if data_file:
         df_resampled, frequency = resample_data(data_frame)
         anomaly_proportion = anomaly_rate(
             m, df_resampled, frequency, plot=False)
-        p1.info('Anomaly proportion between prediction and validation data is **%.2f %%**' %
-                (anomaly_proportion*100))
+        p1.info('Anomaly proportion between prediction and validation '
+                f'data is **{anomaly_proportion*100:.2f} %**')
+
         if anomaly_proportion > 0.1:
             p2.info('Model is outdated. Warm fitting new model...')
             start_time = time.time()
@@ -138,8 +157,9 @@ if data_file:
     start_time = time.time()
     forecast = predict_future(m, user_period)
     prediction_time = time.time() - start_time
-    p3.success('Prediction made with success. Fitting time: **%.2f s**. Prediction time: **%.2f s**.' %
-               (fitting_time, prediction_time))
+    p3.success('Prediction made with success. Fitting time: '
+               f'**{fitting_time:.2f} s**. Prediction time: '
+               f'**{prediction_time:.2f} s**.')
 
     st.subheader('Download prediction')
     st.markdown(save_json(forecast), unsafe_allow_html=True)
