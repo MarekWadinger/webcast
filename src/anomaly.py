@@ -125,8 +125,4 @@ def anomaly_rate(
         return sum(y_train_pred) / len(y_train_pred)
 
     else:
-        raise ValueError(
-            "Validation dataset has no data point after last member of "
-            "time-series of historical data that the model was trained on. "
-            "Please use validation dataset with last member of the time series"
-            f"after {last_history}.")
+        return None

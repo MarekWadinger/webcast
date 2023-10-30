@@ -132,26 +132,30 @@ if data_file:
         attr_dict = json.loads(json.load(model_file))
         m = model_load(attr_dict)
         df_resampled, frequency = resample_data(data_frame)
+        # Check if model is outdated by evaluating deviation between unseen
+        #  validation data and in-sample prediction. None means that no
+        #  unseen data is available.
         anomaly_proportion = anomaly_rate(
             m, df_resampled, frequency, plot=False)
-        p1.info('Anomaly proportion between prediction and validation '
-                f'data is **{anomaly_proportion*100:.2f} %**')
-
-        if anomaly_proportion > 0.1:
-            p2.info('Model is outdated. Warm fitting new model...')
-            start_time = time.time()
-            m = build_model(data_frame, m, user_country, user_chps,
-                            user_sps, user_hps, user_ds, user_ws, user_ys)
-            fitting_time = time.time() - start_time
+        start_time = time.time()
+        if anomaly_proportion is not None:
+            p1.info('Anomaly proportion between prediction and validation'
+                    f' data is **{anomaly_proportion*100:.2f} %**')
+            if anomaly_proportion > 0.1:
+                p2.info('Model is outdated. Warm fitting new model...')
+                m = build_model(data_frame, m, user_country, user_chps,
+                                user_sps, user_hps, user_ds, user_ws, user_ys)
+            else:
+                p2.info('Model is up-to-date and ready for prediction.')
         else:
-            p2.info('Model is up-to-date and ready for prediction.')
-            fitting_time = 0
+            p1.warning(
+                "No unseen historical data available. To validate model, "
+                f"provide data after {(m.start + m.t_scale).round(frequency)}")
     else:
         p2.info('Fitting new model...')
-        start_time = time.time()
         m = build_model(data_frame, None, user_country, user_chps,
                         user_sps, user_hps, user_ds, user_ws, user_ys)
-        fitting_time = time.time() - start_time
+    fitting_time = time.time() - start_time
 
     p3.info('Making prediction...')
     start_time = time.time()
